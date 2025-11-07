@@ -1,5 +1,6 @@
 # Binaries
 pfctl
+!cmd/pfctl
 *.exe
 *.dll
 *.so
