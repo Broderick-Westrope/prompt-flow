@@ -16,12 +16,13 @@ export const CustomNode = memo(({ data }: CustomNodeProps) => {
       style={{
         padding: '12px 16px',
         borderRadius: '8px',
-        border: '2px solid #555',
+        border: '2px solid #333',
         background: '#fff',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         height: '100%',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       }}
     >
       {/* Input handle */}
