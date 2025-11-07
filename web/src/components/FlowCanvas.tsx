@@ -110,23 +110,23 @@ function calculateNodePositions(
     nodesByLevel[level].push(nodeId);
   });
 
-  // Calculate positions with dynamic spacing
-  const levelWidth = 300;
-  const verticalSpacing = 30;
+  // Calculate positions with dynamic spacing (vertical layout)
+  const levelHeight = 150;
+  const horizontalSpacing = 50;
 
   Object.entries(nodesByLevel).forEach(([level, nodeIds]) => {
-    let currentY = 50;
+    let currentX = 50;
 
     nodeIds.forEach((nodeId) => {
       const dimensions = nodeDimensions.get(nodeId) || { width: 100, height: 50 };
 
       positions[nodeId] = {
-        x: parseInt(level) * levelWidth + 50,
-        y: currentY,
+        x: currentX,
+        y: parseInt(level) * levelHeight + 50,
       };
 
       // Move to next position with spacing
-      currentY += dimensions.height + verticalSpacing;
+      currentX += dimensions.width + horizontalSpacing;
     });
   });
 
@@ -167,23 +167,25 @@ function buildGraphNodes(flowData: Flow, showStartEndNode: boolean): [Node[], Ed
       });
     });
 
-    // Calculate positions for start and end nodes
-    let minY = Infinity;
+    // Calculate positions for start and end nodes (vertical layout)
+    let minX = Infinity;
+    let maxX = -Infinity;
     let maxY = -Infinity;
     Object.values(nodePositions).forEach((pos) => {
-      minY = Math.min(minY, pos.y);
+      minX = Math.min(minX, pos.x);
+      maxX = Math.max(maxX, pos.x);
       maxY = Math.max(maxY, pos.y);
     });
 
     // Add start node if there are start edge connections
     if (startEdgeConnections.length > 0) {
-      const startY = minY + (maxY - minY) / 2;
+      const startX = minX + (maxX - minX) / 2;
       const startDimensions = calculateCircleNodeDimensions('start');
 
       newNodes.push({
         id: 'start',
         type: 'circle',
-        position: { x: -150, y: startY },
+        position: { x: startX, y: -150 },
         data: {
           label: 'start',
           isStart: true,
@@ -208,14 +210,13 @@ function buildGraphNodes(flowData: Flow, showStartEndNode: boolean): [Node[], Ed
 
     // Add end node if there are end edge connections
     if (endEdgeConnections.length > 0) {
-      const endY = minY + (maxY - minY) / 2;
-      const maxX = Math.max(...Object.values(nodePositions).map((pos) => pos.x));
+      const endX = minX + (maxX - minX) / 2;
       const endDimensions = calculateCircleNodeDimensions('end');
 
       newNodes.push({
         id: 'end',
         type: 'circle',
-        position: { x: maxX + 250, y: endY },
+        position: { x: endX, y: maxY + 250 },
         data: {
           label: 'end',
           isEnd: true,
