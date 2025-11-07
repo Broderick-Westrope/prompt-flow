@@ -12,14 +12,11 @@ import {
 import '@xyflow/react/dist/style.css';
 import type { Flow, FlowNode } from '../types/flow';
 import { CustomNode } from './CustomNode';
+import { CircleNode } from './CircleNode';
 
 interface FlowCanvasProps {
   flow: Flow;
   onNodeSelect: (node: FlowNode | null) => void;
-}
-
-interface NodeData extends Record<string, unknown> {
-  node: FlowNode;
 }
 
 interface NodeDimensions {
@@ -44,6 +41,22 @@ function calculateNodeDimensions(node: FlowNode): NodeDimensions {
   return {
     width,
     height,
+  };
+}
+
+function calculateCircleNodeDimensions(label: string): NodeDimensions {
+  // Calculate diameter based on text length
+  // For circles, we need more space to accommodate the text
+  const charWidth = 9;
+  const textWidth = label.length * charWidth;
+
+  // Diameter needs to be large enough for text to fit comfortably
+  // Using sqrt(2) * textWidth to ensure text fits in circle
+  const diameter = Math.max(textWidth * 1.6, 70);
+
+  return {
+    width: diameter,
+    height: diameter,
   };
 }
 
@@ -119,8 +132,8 @@ function calculateNodePositions(
   return positions;
 }
 
-function buildGraphNodes(flowData: Flow): [Node<NodeData>[], Edge[]] {
-  const newNodes: Node<NodeData>[] = [];
+function buildGraphNodes(flowData: Flow): [Node[], Edge[]] {
+  const newNodes: Node[] = [];
   const newEdges: Edge[] = [];
 
   // Calculate dimensions for all nodes
@@ -131,7 +144,65 @@ function buildGraphNodes(flowData: Flow): [Node<NodeData>[], Edge[]] {
 
   const nodePositions = calculateNodePositions(flowData.nodes, nodeDimensions);
 
-  // Create nodes
+  // Find nodes that take input from "input" (start edge nodes)
+  const startEdgeNodes = new Set<string>();
+  flowData.nodes.forEach((node) => {
+    node.inputs.forEach((input) => {
+      if (input.from === 'input') {
+        startEdgeNodes.add(node.id);
+      }
+    });
+  });
+
+  // Find nodes that output to "output" (end edge nodes)
+  const endEdgeNodes = new Set<string>();
+  flowData.nodes.forEach((node) => {
+    node.outputs.forEach((output) => {
+      if (output.to === 'output') {
+        endEdgeNodes.add(node.id);
+      }
+    });
+  });
+
+  // Calculate positions for start and end nodes
+  let minY = Infinity;
+  let maxY = -Infinity;
+  Object.values(nodePositions).forEach((pos) => {
+    minY = Math.min(minY, pos.y);
+    maxY = Math.max(maxY, pos.y);
+  });
+
+  // Add start node if there are start edge nodes
+  if (startEdgeNodes.size > 0) {
+    const startY = minY + (maxY - minY) / 2;
+    const startDimensions = calculateCircleNodeDimensions('start');
+
+    newNodes.push({
+      id: 'start',
+      type: 'circle',
+      position: { x: -150, y: startY },
+      data: {
+        label: 'start',
+        isStart: true,
+      },
+      style: {
+        width: startDimensions.width,
+        height: startDimensions.height,
+      },
+    });
+
+    // Create edges from start to start edge nodes
+    startEdgeNodes.forEach((nodeId) => {
+      newEdges.push({
+        id: `start-${nodeId}`,
+        source: 'start',
+        target: nodeId,
+        animated: true,
+      });
+    });
+  }
+
+  // Create regular nodes
   flowData.nodes.forEach((node) => {
     const dimensions = nodeDimensions.get(node.id)!;
 
@@ -148,7 +219,7 @@ function buildGraphNodes(flowData: Flow): [Node<NodeData>[], Edge[]] {
       },
     });
 
-    // Create edges from inputs
+    // Create edges from inputs (excluding "input")
     node.inputs.forEach((input) => {
       if (input.from !== 'input') {
         const parts = input.from.split('.');
@@ -165,15 +236,49 @@ function buildGraphNodes(flowData: Flow): [Node<NodeData>[], Edge[]] {
     });
   });
 
+  // Add end node if there are end edge nodes
+  if (endEdgeNodes.size > 0) {
+    const endY = minY + (maxY - minY) / 2;
+    const maxX = Math.max(...Object.values(nodePositions).map((pos) => pos.x));
+    const endDimensions = calculateCircleNodeDimensions('end');
+
+    newNodes.push({
+      id: 'end',
+      type: 'circle',
+      position: { x: maxX + 250, y: endY },
+      data: {
+        label: 'end',
+        isEnd: true,
+      },
+      style: {
+        width: endDimensions.width,
+        height: endDimensions.height,
+      },
+    });
+
+    // Create edges from end edge nodes to end
+    endEdgeNodes.forEach((nodeId) => {
+      newEdges.push({
+        id: `${nodeId}-end`,
+        source: nodeId,
+        target: 'end',
+        animated: true,
+      });
+    });
+  }
+
   return [newNodes, newEdges];
 }
 
 export function FlowCanvas({ flow, onNodeSelect }: FlowCanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Register custom node types
-  const nodeTypes = useMemo(() => ({ custom: CustomNode }), []);
+  const nodeTypes = useMemo(() => ({
+    custom: CustomNode,
+    circle: CircleNode
+  }), []);
 
   useEffect(() => {
     const [newNodes, newEdges] = buildGraphNodes(flow);
@@ -182,12 +287,12 @@ export function FlowCanvas({ flow, onNodeSelect }: FlowCanvasProps) {
   }, [flow, setNodes, setEdges]);
 
   const handleSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: { nodes: Node<NodeData>[] }) => {
-      if (selectedNodes.length > 0) {
-        // A node is selected
-        onNodeSelect(selectedNodes[0].data.node);
+    ({ nodes: selectedNodes }: { nodes: Node[] }) => {
+      if (selectedNodes.length > 0 && selectedNodes[0].data.node) {
+        // A regular node is selected (not start/end)
+        onNodeSelect(selectedNodes[0].data.node as FlowNode);
       } else {
-        // No nodes selected
+        // No nodes selected or start/end node selected
         onNodeSelect(null);
       }
     },
