@@ -61,7 +61,7 @@ function App() {
     }
   };
 
-  const handleNodeClick = (node: FlowNode) => {
+  const handleNodeSelect = (node: FlowNode | null) => {
     setSelectedNode(node);
   };
 
@@ -93,7 +93,7 @@ function App() {
           onExecute={handleExecuteFlow}
         />
 
-        <FlowCanvas flow={flow} onNodeClick={handleNodeClick} />
+        <FlowCanvas flow={flow} onNodeSelect={handleNodeSelect} />
       </div>
 
       {executionError && (

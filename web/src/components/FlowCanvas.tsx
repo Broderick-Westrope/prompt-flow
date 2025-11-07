@@ -15,7 +15,7 @@ import { CustomNode } from './CustomNode';
 
 interface FlowCanvasProps {
   flow: Flow;
-  onNodeClick: (node: FlowNode) => void;
+  onNodeSelect: (node: FlowNode | null) => void;
 }
 
 interface NodeData extends Record<string, unknown> {
@@ -168,7 +168,7 @@ function buildGraphNodes(flowData: Flow): [Node<NodeData>[], Edge[]] {
   return [newNodes, newEdges];
 }
 
-export function FlowCanvas({ flow, onNodeClick }: FlowCanvasProps) {
+export function FlowCanvas({ flow, onNodeSelect }: FlowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -181,11 +181,17 @@ export function FlowCanvas({ flow, onNodeClick }: FlowCanvasProps) {
     setEdges(newEdges);
   }, [flow, setNodes, setEdges]);
 
-  const handleNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node<NodeData>) => {
-      onNodeClick(node.data.node);
+  const handleSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: { nodes: Node<NodeData>[] }) => {
+      if (selectedNodes.length > 0) {
+        // A node is selected
+        onNodeSelect(selectedNodes[0].data.node);
+      } else {
+        // No nodes selected
+        onNodeSelect(null);
+      }
     },
-    [onNodeClick]
+    [onNodeSelect]
   );
 
   return (
@@ -196,7 +202,7 @@ export function FlowCanvas({ flow, onNodeClick }: FlowCanvasProps) {
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick}
+        onSelectionChange={handleSelectionChange}
         fitView
       >
         <Background />
