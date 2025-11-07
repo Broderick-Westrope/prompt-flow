@@ -8,6 +8,7 @@ import {
   useEdgesState,
   type Node,
   type Edge,
+  type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Flow, FlowNode } from '../types/flow';
@@ -27,6 +28,31 @@ interface NodeDimensions {
 
 interface NodePositions {
   [nodeId: string]: { x: number; y: number };
+}
+
+// Local storage utilities for persisting node positions per-flow
+function getLocalStorageKey(flowName: string): string {
+  return `prompt-flow-layout-${flowName}`;
+}
+
+function saveNodePositions(flowName: string, positions: NodePositions): void {
+  try {
+    const key = getLocalStorageKey(flowName);
+    localStorage.setItem(key, JSON.stringify(positions));
+  } catch (error) {
+    console.error('Failed to save node positions to local storage:', error);
+  }
+}
+
+function loadNodePositions(flowName: string): NodePositions | null {
+  try {
+    const key = getLocalStorageKey(flowName);
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : null;
+  } catch (error) {
+    console.error('Failed to load node positions from local storage:', error);
+    return null;
+  }
 }
 
 function calculateNodeDimensions(node: FlowNode): NodeDimensions {
@@ -133,7 +159,11 @@ function calculateNodePositions(
   return positions;
 }
 
-function buildGraphNodes(flowData: Flow, showStartEndNode: boolean): [Node[], Edge[]] {
+function buildGraphNodes(
+  flowData: Flow,
+  showStartEndNode: boolean,
+  savedPositions: NodePositions | null
+): [Node[], Edge[]] {
   const newNodes: Node[] = [];
   const newEdges: Edge[] = [];
 
@@ -143,7 +173,11 @@ function buildGraphNodes(flowData: Flow, showStartEndNode: boolean): [Node[], Ed
     nodeDimensions.set(node.id, calculateNodeDimensions(node));
   });
 
-  const nodePositions = calculateNodePositions(flowData.nodes, nodeDimensions);
+  // Calculate default positions
+  const defaultPositions = calculateNodePositions(flowData.nodes, nodeDimensions);
+
+  // Merge saved positions with default positions (saved positions take precedence)
+  const nodePositions = { ...defaultPositions, ...savedPositions };
 
   // Only add start/end nodes if showStartEndNode is enabled
   if (showStartEndNode) {
@@ -302,11 +336,37 @@ export function FlowCanvas({ flow, onNodeSelect, showStartEndNode = false }: Flo
     circle: CircleNode
   }), []);
 
+  // Load saved positions and build graph on flow change
   useEffect(() => {
-    const [newNodes, newEdges] = buildGraphNodes(flow, showStartEndNode);
+    const savedPositions = loadNodePositions(flow.name);
+    const [newNodes, newEdges] = buildGraphNodes(flow, showStartEndNode, savedPositions);
     setNodes(newNodes);
     setEdges(newEdges);
   }, [flow, showStartEndNode, setNodes, setEdges]);
+
+  // Handle node changes and save positions when nodes are dragged
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+
+      // Save positions when nodes are moved
+      const positionChanges = changes.filter((change) => change.type === 'position' && change.dragging === false);
+      if (positionChanges.length > 0) {
+        // Extract current positions from nodes after a short delay to ensure state is updated
+        setTimeout(() => {
+          const positions: NodePositions = {};
+          nodes.forEach((node) => {
+            // Only save positions for regular nodes (not start/end nodes)
+            if (node.id !== 'start' && node.id !== 'end') {
+              positions[node.id] = node.position;
+            }
+          });
+          saveNodePositions(flow.name, positions);
+        }, 0);
+      }
+    },
+    [onNodesChange, nodes, flow.name]
+  );
 
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes }: { nodes: Node[] }) => {
@@ -327,7 +387,7 @@ export function FlowCanvas({ flow, onNodeSelect, showStartEndNode = false }: Flo
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={handleSelectionChange}
         fitView
