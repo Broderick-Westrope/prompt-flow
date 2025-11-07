@@ -17,6 +17,7 @@ import { CircleNode } from './CircleNode';
 interface FlowCanvasProps {
   flow: Flow;
   onNodeSelect: (node: FlowNode | null) => void;
+  showStartEndNode?: boolean;
 }
 
 interface NodeDimensions {
@@ -132,7 +133,7 @@ function calculateNodePositions(
   return positions;
 }
 
-function buildGraphNodes(flowData: Flow): [Node[], Edge[]] {
+function buildGraphNodes(flowData: Flow, showStartEndNode: boolean): [Node[], Edge[]] {
   const newNodes: Node[] = [];
   const newEdges: Edge[] = [];
 
@@ -144,63 +145,98 @@ function buildGraphNodes(flowData: Flow): [Node[], Edge[]] {
 
   const nodePositions = calculateNodePositions(flowData.nodes, nodeDimensions);
 
-  // Find nodes that take input from "input" (start edge nodes) and track their input names
-  const startEdgeConnections: { nodeId: string; inputName: string }[] = [];
-  flowData.nodes.forEach((node) => {
-    node.inputs.forEach((input) => {
-      if (input.from === 'input') {
-        startEdgeConnections.push({ nodeId: node.id, inputName: input.name });
-      }
-    });
-  });
-
-  // Find nodes that output to "output" (end edge nodes) and track their output names
-  const endEdgeConnections: { nodeId: string; outputName: string }[] = [];
-  flowData.nodes.forEach((node) => {
-    node.outputs.forEach((output) => {
-      if (output.to === 'output') {
-        endEdgeConnections.push({ nodeId: node.id, outputName: output.name });
-      }
-    });
-  });
-
-  // Calculate positions for start and end nodes
-  let minY = Infinity;
-  let maxY = -Infinity;
-  Object.values(nodePositions).forEach((pos) => {
-    minY = Math.min(minY, pos.y);
-    maxY = Math.max(maxY, pos.y);
-  });
-
-  // Add start node if there are start edge connections
-  if (startEdgeConnections.length > 0) {
-    const startY = minY + (maxY - minY) / 2;
-    const startDimensions = calculateCircleNodeDimensions('start');
-
-    newNodes.push({
-      id: 'start',
-      type: 'circle',
-      position: { x: -150, y: startY },
-      data: {
-        label: 'start',
-        isStart: true,
-      },
-      style: {
-        width: startDimensions.width,
-        height: startDimensions.height,
-      },
-    });
-
-    // Create edges from start to start edge nodes with labels
-    startEdgeConnections.forEach(({ nodeId, inputName }) => {
-      newEdges.push({
-        id: `start-${nodeId}-${inputName}`,
-        source: 'start',
-        target: nodeId,
-        label: inputName,
-        animated: true,
+  // Only add start/end nodes if showStartEndNode is enabled
+  if (showStartEndNode) {
+    // Find nodes that take input from "input" (start edge nodes) and track their input names
+    const startEdgeConnections: { nodeId: string; inputName: string }[] = [];
+    flowData.nodes.forEach((node) => {
+      node.inputs.forEach((input) => {
+        if (input.from === 'input') {
+          startEdgeConnections.push({ nodeId: node.id, inputName: input.name });
+        }
       });
     });
+
+    // Find nodes that output to "output" (end edge nodes) and track their output names
+    const endEdgeConnections: { nodeId: string; outputName: string }[] = [];
+    flowData.nodes.forEach((node) => {
+      node.outputs.forEach((output) => {
+        if (output.to === 'output') {
+          endEdgeConnections.push({ nodeId: node.id, outputName: output.name });
+        }
+      });
+    });
+
+    // Calculate positions for start and end nodes
+    let minY = Infinity;
+    let maxY = -Infinity;
+    Object.values(nodePositions).forEach((pos) => {
+      minY = Math.min(minY, pos.y);
+      maxY = Math.max(maxY, pos.y);
+    });
+
+    // Add start node if there are start edge connections
+    if (startEdgeConnections.length > 0) {
+      const startY = minY + (maxY - minY) / 2;
+      const startDimensions = calculateCircleNodeDimensions('start');
+
+      newNodes.push({
+        id: 'start',
+        type: 'circle',
+        position: { x: -150, y: startY },
+        data: {
+          label: 'start',
+          isStart: true,
+        },
+        style: {
+          width: startDimensions.width,
+          height: startDimensions.height,
+        },
+      });
+
+      // Create edges from start to start edge nodes with labels
+      startEdgeConnections.forEach(({ nodeId, inputName }) => {
+        newEdges.push({
+          id: `start-${nodeId}-${inputName}`,
+          source: 'start',
+          target: nodeId,
+          label: inputName,
+          animated: true,
+        });
+      });
+    }
+
+    // Add end node if there are end edge connections
+    if (endEdgeConnections.length > 0) {
+      const endY = minY + (maxY - minY) / 2;
+      const maxX = Math.max(...Object.values(nodePositions).map((pos) => pos.x));
+      const endDimensions = calculateCircleNodeDimensions('end');
+
+      newNodes.push({
+        id: 'end',
+        type: 'circle',
+        position: { x: maxX + 250, y: endY },
+        data: {
+          label: 'end',
+          isEnd: true,
+        },
+        style: {
+          width: endDimensions.width,
+          height: endDimensions.height,
+        },
+      });
+
+      // Create edges from end edge nodes to end with labels
+      endEdgeConnections.forEach(({ nodeId, outputName }) => {
+        newEdges.push({
+          id: `${nodeId}-${outputName}-end`,
+          source: nodeId,
+          target: 'end',
+          label: outputName,
+          animated: true,
+        });
+      });
+    }
   }
 
   // Create regular nodes
@@ -237,42 +273,10 @@ function buildGraphNodes(flowData: Flow): [Node[], Edge[]] {
     });
   });
 
-  // Add end node if there are end edge connections
-  if (endEdgeConnections.length > 0) {
-    const endY = minY + (maxY - minY) / 2;
-    const maxX = Math.max(...Object.values(nodePositions).map((pos) => pos.x));
-    const endDimensions = calculateCircleNodeDimensions('end');
-
-    newNodes.push({
-      id: 'end',
-      type: 'circle',
-      position: { x: maxX + 250, y: endY },
-      data: {
-        label: 'end',
-        isEnd: true,
-      },
-      style: {
-        width: endDimensions.width,
-        height: endDimensions.height,
-      },
-    });
-
-    // Create edges from end edge nodes to end with labels
-    endEdgeConnections.forEach(({ nodeId, outputName }) => {
-      newEdges.push({
-        id: `${nodeId}-${outputName}-end`,
-        source: nodeId,
-        target: 'end',
-        label: outputName,
-        animated: true,
-      });
-    });
-  }
-
   return [newNodes, newEdges];
 }
 
-export function FlowCanvas({ flow, onNodeSelect }: FlowCanvasProps) {
+export function FlowCanvas({ flow, onNodeSelect, showStartEndNode = false }: FlowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -283,10 +287,10 @@ export function FlowCanvas({ flow, onNodeSelect }: FlowCanvasProps) {
   }), []);
 
   useEffect(() => {
-    const [newNodes, newEdges] = buildGraphNodes(flow);
+    const [newNodes, newEdges] = buildGraphNodes(flow, showStartEndNode);
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [flow, setNodes, setEdges]);
+  }, [flow, showStartEndNode, setNodes, setEdges]);
 
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes }: { nodes: Node[] }) => {

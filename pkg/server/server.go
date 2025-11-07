@@ -21,14 +21,15 @@ var staticFiles embed.FS
 
 // Server represents the web server
 type Server struct {
-	port     int
-	flowPath string
-	registry *providers.Registry
-	executor *executor.Executor
+	port             int
+	flowPath         string
+	showStartEndNode bool
+	registry         *providers.Registry
+	executor         *executor.Executor
 }
 
 // New creates a new server instance
-func New(port int, flowPath string) *Server {
+func New(port int, flowPath string, showStartEndNode bool) *Server {
 	key := os.Getenv("GITHUB_PLAYGROUND_PAT")
 	if key == "" {
 		fmt.Fprintf(os.Stderr, "warning: GITHUB_PLAYGROUND_PAT is not set, skipping GitHub Playground OpenAI provider\n")
@@ -40,10 +41,11 @@ func New(port int, flowPath string) *Server {
 	registry.Register(providers.NewGithubPlaygroundOpenAIProvider(key))
 
 	return &Server{
-		port:     port,
-		flowPath: flowPath,
-		registry: registry,
-		executor: executor.New(registry),
+		port:             port,
+		flowPath:         flowPath,
+		showStartEndNode: showStartEndNode,
+		registry:         registry,
+		executor:         executor.New(registry),
 	}
 }
 
@@ -56,6 +58,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/flow/validate", s.handleValidateFlow)
 	mux.HandleFunc("/api/flow/execute", s.handleExecuteFlow)
 	mux.HandleFunc("/api/providers", s.handleGetProviders)
+	mux.HandleFunc("/api/config", s.handleGetConfig)
 
 	// Serve static files
 	staticFS, err := fs.Sub(staticFiles, "static/dist")
@@ -207,5 +210,18 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"providers": providers,
+	})
+}
+
+// handleGetConfig returns server configuration
+func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"showStartEndNode": s.showStartEndNode,
 	})
 }

@@ -3,12 +3,14 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { FlowCanvas } from './components/FlowCanvas';
 import { useFlow } from './hooks/useFlow';
+import { useConfig } from './hooks/useConfig';
 import { api } from './services/api';
 import type { FlowNode, ExecutionResult } from './types/flow';
 import './App.css';
 
 function App() {
   const { flow, loading, error } = useFlow();
+  const { config, loading: configLoading } = useConfig();
   const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [executing, setExecuting] = useState(false);
@@ -65,8 +67,8 @@ function App() {
     setSelectedNode(node);
   };
 
-  if (loading) {
-    return <div className="loading">Loading flow...</div>;
+  if (loading || configLoading) {
+    return <div className="loading">Loading...</div>;
   }
 
   if (error && !flow) {
@@ -93,7 +95,11 @@ function App() {
           onExecute={handleExecuteFlow}
         />
 
-        <FlowCanvas flow={flow} onNodeSelect={handleNodeSelect} />
+        <FlowCanvas
+          flow={flow}
+          onNodeSelect={handleNodeSelect}
+          showStartEndNode={config?.showStartEndNode}
+        />
       </div>
 
       {executionError && (
