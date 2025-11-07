@@ -8,6 +8,7 @@ interface SidebarProps {
   flow: Flow | null;
   selectedNode: FlowNode | null;
   inputs: Record<string, string>;
+  rootInputs: string[];
   executing: boolean;
   executionResult: ExecutionResult | null;
   onInputChange: (key: string, value: string) => void;
@@ -18,6 +19,7 @@ export function Sidebar({
   flow,
   selectedNode,
   inputs,
+  rootInputs,
   executing,
   executionResult,
   onInputChange,
@@ -31,6 +33,7 @@ export function Sidebar({
 
       <TestSection
         inputs={inputs}
+        rootInputs={rootInputs}
         executing={executing}
         onInputChange={onInputChange}
         onExecute={onExecute}

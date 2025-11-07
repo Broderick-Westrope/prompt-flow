@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { FlowCanvas } from './components/FlowCanvas';
@@ -16,6 +16,22 @@ function App() {
     null
   );
   const [executionError, setExecutionError] = useState<string | null>(null);
+
+  // Extract root-level inputs from the flow definition
+  const rootInputs = useMemo(() => {
+    if (!flow) return [];
+
+    const rootInputSet = new Set<string>();
+    flow.nodes.forEach(node => {
+      node.inputs.forEach(input => {
+        if (input.from === 'input') {
+          rootInputSet.add(input.name);
+        }
+      });
+    });
+
+    return Array.from(rootInputSet);
+  }, [flow]);
 
   const handleInputChange = (key: string, value: string) => {
     setInputs((prev) => ({
@@ -70,6 +86,7 @@ function App() {
           flow={flow}
           selectedNode={selectedNode}
           inputs={inputs}
+          rootInputs={rootInputs}
           executing={executing}
           executionResult={executionResult}
           onInputChange={handleInputChange}

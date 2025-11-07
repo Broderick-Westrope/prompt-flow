@@ -11,6 +11,7 @@ function App() {
     const [inputs, setInputs] = useState({});
     const [executing, setExecuting] = useState(false);
     const [executionResult, setExecutionResult] = useState(null);
+    const [rootInputs, setRootInputs] = useState([]);
 
     // Load flow on mount
     useEffect(() => {
@@ -26,11 +27,30 @@ function App() {
             const data = await response.json();
             setFlow(data);
             buildGraph(data);
+            extractAndSetRootInputs(data);
             setLoading(false);
         } catch (err) {
             setError(err.message);
             setLoading(false);
         }
+    }
+
+    function extractAndSetRootInputs(flowData) {
+        // Extract unique root-level inputs from the flow definition
+        // Root inputs are those where input.from === "input"
+        const rootInputSet = new Set();
+        if (flowData.nodes) {
+            flowData.nodes.forEach(node => {
+                if (node.inputs) {
+                    node.inputs.forEach(input => {
+                        if (input.from === 'input') {
+                            rootInputSet.add(input.name);
+                        }
+                    });
+                }
+            });
+        }
+        setRootInputs(Array.from(rootInputSet));
     }
 
     function buildGraph(flowData) {
@@ -267,14 +287,20 @@ function App() {
 
                     <div className="test-section">
                         <h2>Test Flow</h2>
-                        <div className="input-group">
-                            <label>Input (user_input)</label>
-                            <textarea
-                                value={inputs.user_input || ''}
-                                onChange={(e) => updateInput('user_input', e.target.value)}
-                                placeholder="Enter test input..."
-                            />
-                        </div>
+                        {rootInputs.length === 0 ? (
+                            <div className="info-message">No inputs required for this flow</div>
+                        ) : (
+                            rootInputs.map(inputName => (
+                                <div key={inputName} className="input-group">
+                                    <label>Input ({inputName})</label>
+                                    <textarea
+                                        value={inputs[inputName] || ''}
+                                        onChange={(e) => updateInput(inputName, e.target.value)}
+                                        placeholder={`Enter ${inputName}...`}
+                                    />
+                                </div>
+                            ))
+                        )}
                         <button
                             className="btn"
                             onClick={executeFlow}
