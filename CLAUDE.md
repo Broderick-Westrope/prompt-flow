@@ -15,7 +15,19 @@ go build -o pfctl ./cmd/pfctl
 
 # Install to $GOPATH/bin
 go install ./cmd/pfctl
+
+# Build web UI (required after changing web source files)
+cd web && npm run build
+# This outputs to pkg/server/static/dist/
+# Then rebuild Go binary to embed new static files
+cd .. && go build -o pfctl ./cmd/pfctl
 ```
+
+**IMPORTANT - Web UI Source Files:**
+- Web UI source: `web/src/` (TypeScript/React with Vite)
+- Build output: `pkg/server/static/dist/` (embedded via `//go:embed`)
+- `pkg/server/static/app.js` is OLD and NOT the source - DO NOT EDIT
+- After changing web UI: rebuild web (`cd web && npm run build`) then rebuild Go binary
 
 ### Testing
 ```bash
