@@ -1,0 +1,11 @@
+version: 3
+
+tasks:
+  build.web:
+    dir: web
+    cmd: "npm run build"
+
+  build.cli:
+    deps:
+      - build.web
+    cmd: "go build -o pfctl ./cmd/pfctl"

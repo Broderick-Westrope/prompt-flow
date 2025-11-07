@@ -37,3 +37,7 @@ Thumbs.db
 !examples/**/*.flow.json
 
 !CLAUDE.md
+
+# Web build
+pkg/server/static/dist
+web/node_modules

@@ -16,7 +16,7 @@ import (
 	"github.com/broderick/prompt-flow/pkg/providers"
 )
 
-//go:embed static/*
+//go:embed static/dist/*
 var staticFiles embed.FS
 
 // Server represents the web server
@@ -53,7 +53,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/providers", s.handleGetProviders)
 
 	// Serve static files
-	staticFS, err := fs.Sub(staticFiles, "static")
+	staticFS, err := fs.Sub(staticFiles, "static/dist")
 	if err != nil {
 		return fmt.Errorf("failed to get static file system: %w", err)
 	}
