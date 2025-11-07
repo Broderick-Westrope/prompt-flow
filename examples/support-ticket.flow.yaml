@@ -8,7 +8,6 @@ config:
 
 nodes:
   - id: "classify_urgency"
-    type: "llm"
     inputs:
       - name: "ticket_text"
         from: "input"
@@ -22,7 +21,6 @@ nodes:
       - name: "urgency_level"
 
   - id: "classify_department"
-    type: "llm"
     inputs:
       - name: "ticket_text"
         from: "input"
@@ -36,7 +34,6 @@ nodes:
       - name: "department"
 
   - id: "retrieve_faqs"
-    type: "llm"
     inputs:
       - name: "ticket_text"
         from: "input"
@@ -54,7 +51,6 @@ nodes:
       - name: "faqs"
 
   - id: "draft_response"
-    type: "llm"
     inputs:
       - name: "ticket_text"
         from: "input"

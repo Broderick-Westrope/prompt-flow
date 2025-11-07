@@ -46,7 +46,6 @@ func createSampleFlow(name string) *flow.Flow {
 		Nodes: []flow.Node{
 			{
 				ID:       "process",
-				Type:     "llm",
 				Provider: "openai",
 				Model:    "gpt-3.5-turbo",
 				Inputs: []flow.Input{

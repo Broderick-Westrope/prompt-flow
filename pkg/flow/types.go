@@ -21,7 +21,6 @@ type Config struct {
 // Node represents a single node in the flow
 type Node struct {
 	ID       string         `yaml:"id" json:"id"`
-	Type     string         `yaml:"type" json:"type"` // "llm", "custom", etc.
 	Provider string         `yaml:"provider,omitempty" json:"provider,omitempty"`
 	Model    string         `yaml:"model,omitempty" json:"model,omitempty"`
 	Inputs   []Input        `yaml:"inputs" json:"inputs"`

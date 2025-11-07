@@ -67,12 +67,8 @@ func Validate(flow *Flow) error {
 }
 
 func validateNode(node *Node, existingIDs map[string]bool) error {
-	if node.Type == "" {
-		return ValidationError{Field: "type", Message: "node type is required"}
-	}
-
-	if node.Type == "llm" && node.Prompt == "" {
-		return ValidationError{Field: "prompt", Message: "prompt is required for LLM nodes"}
+	if node.Prompt == "" {
+		return ValidationError{Field: "prompt", Message: "prompt is required"}
 	}
 
 	// Validate outputs
