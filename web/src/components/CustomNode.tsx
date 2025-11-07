@@ -6,9 +6,10 @@ interface CustomNodeProps {
   data: {
     node: FlowNode;
   };
+  selected?: boolean;
 }
 
-export const CustomNode = memo(({ data }: CustomNodeProps) => {
+export const CustomNode = memo(({ data, selected }: CustomNodeProps) => {
   const { node } = data;
 
   return (
@@ -22,7 +23,10 @@ export const CustomNode = memo(({ data }: CustomNodeProps) => {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100%',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        boxShadow: selected
+          ? '0 0 0 3px rgba(0, 123, 255, 0.5)'
+          : '0 2px 4px rgba(0, 0, 0, 0.1)',
+        borderColor: selected ? '#007bff' : '#333',
       }}
     >
       {/* Input handle */}

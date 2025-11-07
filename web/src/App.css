@@ -226,10 +226,6 @@
 }
 
 /* React Flow custom styles */
-.react-flow__node.selected {
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
-}
-
 .react-flow__edge-path {
   stroke: #666;
   stroke-width: 2;
