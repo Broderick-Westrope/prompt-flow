@@ -1,0 +1,36 @@
+# Binaries
+pfctl
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+
+# Flow files (user-specific)
+*.flow.yaml
+*.flow.json
+!examples/**/*.flow.yaml
+!examples/**/*.flow.json

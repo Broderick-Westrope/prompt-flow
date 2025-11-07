@@ -1,0 +1,23 @@
+version: "1.0"
+name: "simple-chat"
+description: "A simple chat flow that processes user input"
+
+config:
+  default_provider: "github_playground_openai"
+  default_model: "gpt-3.5-turbo"
+
+nodes:
+  - id: "chat"
+    type: "llm"
+    inputs:
+      - name: "user_input"
+        from: "input"
+    prompt: |
+      You are a helpful assistant.
+
+      User: {{.user_input}}
+
+      Assistant: Please provide a helpful and concise response.
+    outputs:
+      - name: "response"
+        to: "output"

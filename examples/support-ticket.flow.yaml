@@ -1,0 +1,87 @@
+version: "1.0"
+name: "support-ticket-classifier"
+description: "Classifies support tickets by urgency and department, retrieves relevant FAQs, and drafts a response"
+
+config:
+  default_provider: "openai"
+  default_model: "gpt-3.5-turbo"
+
+nodes:
+  - id: "classify_urgency"
+    type: "llm"
+    inputs:
+      - name: "ticket_text"
+        from: "input"
+    prompt: |
+      The user has submitted the following ticket:
+      {{.ticket_text}}
+
+      Classify the ticket's urgency into either high, medium, or low.
+      Output only the urgency level. Do not format the strings, add a sentence, or change the chosen word in any other way.
+    outputs:
+      - name: "urgency_level"
+
+  - id: "classify_department"
+    type: "llm"
+    inputs:
+      - name: "ticket_text"
+        from: "input"
+    prompt: |
+      The user has submitted the following ticket:
+      {{.ticket_text}}
+
+      Classify the ticket by department into either billing, engineering, or sales.
+      Output only the department. Do not format the strings, add a sentence, or change the chosen word in any other way.
+    outputs:
+      - name: "department"
+
+  - id: "retrieve_faqs"
+    type: "llm"
+    inputs:
+      - name: "ticket_text"
+        from: "input"
+      - name: "department"
+        from: "classify_department.department"
+    prompt: |
+      The user has submitted the following ticket:
+      {{.ticket_text}}
+
+      Extract up to 3 FAQs (both question and response) from the knowledge base of department {{.department}} which are relevant to the user's ticket.
+      If there are no tickets that are relevant to the user's ticket then return none.
+
+      Format your response as a simple list of questions and answers.
+    outputs:
+      - name: "faqs"
+
+  - id: "draft_response"
+    type: "llm"
+    inputs:
+      - name: "ticket_text"
+        from: "input"
+      - name: "urgency_level"
+        from: "classify_urgency.urgency_level"
+      - name: "department"
+        from: "classify_department.department"
+      - name: "faqs"
+        from: "retrieve_faqs.faqs"
+    prompt: |
+      Draft a professional response to this support ticket.
+
+      Ticket urgency: {{.urgency_level}}
+      Department: {{.department}}
+
+      Ticket content:
+      {{.ticket_text}}
+
+      Relevant FAQs:
+      {{.faqs}}
+
+      Your response should:
+      1. Acknowledge the ticket
+      2. Address the urgency appropriately
+      3. Reference relevant FAQs if applicable
+      4. Be professional and helpful
+      5. Route to the appropriate department if needed
+    outputs:
+      - name: "response"
+        to: "output"
