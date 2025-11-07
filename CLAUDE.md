@@ -9,6 +9,7 @@ Prompt Flow is a vendor-agnostic CLI tool (`pfctl`) for creating, testing, and v
 ## Build and Development Commands
 
 ### Building
+
 ```bash
 # Build the CLI binary
 go build -o pfctl ./cmd/pfctl
@@ -21,15 +22,20 @@ cd web && npm run build
 # This outputs to pkg/server/static/dist/
 # Then rebuild Go binary to embed new static files
 cd .. && go build -o pfctl ./cmd/pfctl
+
+# Build more easily with one command
+task build.cli
 ```
 
 **IMPORTANT - Web UI Source Files:**
+
 - Web UI source: `web/src/` (TypeScript/React with Vite)
 - Build output: `pkg/server/static/dist/` (embedded via `//go:embed`)
 - `pkg/server/static/app.js` is OLD and NOT the source - DO NOT EDIT
 - After changing web UI: rebuild web (`cd web && npm run build`) then rebuild Go binary
 
 ### Testing
+
 ```bash
 # Run all tests (currently no test files exist)
 go test ./...
@@ -39,6 +45,7 @@ go test -v ./...
 ```
 
 ### Running the CLI
+
 ```bash
 # After building, the binary is available as ./pfctl
 ./pfctl --help
@@ -51,7 +58,9 @@ go test -v ./...
 ```
 
 ### Environment Setup
+
 The application requires API keys for LLM providers:
+
 ```bash
 export OPENAI_API_KEY="your-key-here"
 export ANTHROPIC_API_KEY="your-key-here"
@@ -63,11 +72,13 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 ### Core Components
 
 **Flow Definition & Validation** (`pkg/flow/`)
+
 - `types.go`: Core data structures (Flow, Node, Input, Output, ExecutionResult)
 - `parser.go`: YAML/JSON parsing for flow definitions
 - `validator.go`: Flow validation including cycle detection, reference checking, and schema validation
 
 **Execution Engine** (`pkg/executor/`)
+
 - `executor.go`: DAG execution engine that:
   - Performs topological sort using Kahn's algorithm to determine node execution order
   - Executes nodes sequentially based on dependencies
@@ -76,6 +87,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
   - Tracks metrics (tokens, costs, timing) for each node
 
 **Provider System** (`pkg/providers/`)
+
 - `provider.go`: Provider interface and Registry for managing LLM providers
 - `openai.go`: OpenAI API integration with cost estimation
 - `anthropic.go`: Anthropic API integration with cost estimation
@@ -83,6 +95,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 - All providers implement the `Provider` interface with `Name()` and `Complete()` methods
 
 **Web Server** (`pkg/server/`)
+
 - `server.go`: HTTP server exposing REST API for:
   - `/api/flow`: Load and return flow definitions
   - `/api/flow/validate`: Validate flow syntax and structure
@@ -91,6 +104,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 - `static/`: Embedded web UI assets for visual DAG editing and testing
 
 **CLI Commands** (`cmd/pfctl/`)
+
 - `main.go`: CLI entry point using kong for command parsing
 - `init_cmd.go`: Create new flow definitions
 - `validate_cmd.go`: Validate flow files
@@ -121,6 +135,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 ## Flow Definition Structure
 
 Flows are YAML/JSON files with:
+
 - `version`: Currently "1.0"
 - `name`, `description`: Metadata
 - `config`: Default provider and model settings
