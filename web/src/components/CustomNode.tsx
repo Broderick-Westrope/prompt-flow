@@ -5,12 +5,14 @@ import type { FlowNode } from '../types/flow';
 interface CustomNodeProps {
   data: {
     node: FlowNode;
+    hasInputsFromNodes?: boolean;
+    hasOutputsToNodes?: boolean;
   };
   selected?: boolean;
 }
 
 export const CustomNode = memo(({ data, selected }: CustomNodeProps) => {
-  const { node } = data;
+  const { node, hasInputsFromNodes = true, hasOutputsToNodes = true } = data;
 
   return (
     <div
@@ -29,8 +31,8 @@ export const CustomNode = memo(({ data, selected }: CustomNodeProps) => {
         borderColor: selected ? '#007bff' : '#333',
       }}
     >
-      {/* Input handle */}
-      {node.inputs.length > 0 && (
+      {/* Input handle - only show if there are inputs and they come from other nodes */}
+      {node.inputs.length > 0 && hasInputsFromNodes && (
         <Handle
           type="target"
           position={Position.Top}
@@ -50,8 +52,8 @@ export const CustomNode = memo(({ data, selected }: CustomNodeProps) => {
         {node.id}
       </div>
 
-      {/* Output handle */}
-      {node.outputs.length > 0 && (
+      {/* Output handle - only show if there are outputs and they go to other nodes */}
+      {node.outputs.length > 0 && hasOutputsToNodes && (
         <Handle
           type="source"
           position={Position.Bottom}

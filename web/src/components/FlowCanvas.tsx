@@ -243,12 +243,27 @@ function buildGraphNodes(flowData: Flow, showStartEndNode: boolean): [Node[], Ed
   flowData.nodes.forEach((node) => {
     const dimensions = nodeDimensions.get(node.id)!;
 
+    // Check if node has inputs/outputs from/to other nodes (not just "input"/"output")
+    const hasInputsFromNodes = node.inputs.some((input) => input.from !== 'input');
+    const hasOutputsToNodes = (() => {
+      // Check if any other node references this node's outputs
+      return flowData.nodes.some((otherNode) =>
+        otherNode.inputs.some((input) => {
+          if (input.from === 'input') return false;
+          const parts = input.from.split('.');
+          return parts.length === 2 && parts[0] === node.id;
+        })
+      );
+    })();
+
     newNodes.push({
       id: node.id,
       type: 'custom',
       position: nodePositions[node.id],
       data: {
         node: node,
+        hasInputsFromNodes: showStartEndNode || hasInputsFromNodes,
+        hasOutputsToNodes: showStartEndNode || hasOutputsToNodes,
       },
       style: {
         width: dimensions.width,
