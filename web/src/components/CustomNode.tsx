@@ -29,7 +29,7 @@ export const CustomNode = memo(({ data }: CustomNodeProps) => {
       {node.inputs.length > 0 && (
         <Handle
           type="target"
-          position={Position.Left}
+          position={Position.Top}
           style={{ background: '#555' }}
         />
       )}
@@ -50,7 +50,7 @@ export const CustomNode = memo(({ data }: CustomNodeProps) => {
       {node.outputs.length > 0 && (
         <Handle
           type="source"
-          position={Position.Right}
+          position={Position.Bottom}
           style={{ background: '#555' }}
         />
       )}
