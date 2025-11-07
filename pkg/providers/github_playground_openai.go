@@ -16,7 +16,7 @@ type GithubPlaygroundOpenAIProvider struct {
 // NewGithubPlaygroundProvider creates a new Github Playground provider
 func NewGithubPlaygroundOpenAIProvider(apiKey string) *GithubPlaygroundOpenAIProvider {
 	cfg := openai.DefaultConfig(apiKey)
-	cfg.BaseURL = "https://api.github.com/playground"
+	cfg.BaseURL = "https://models.github.ai/inference"
 	client := openai.NewClientWithConfig(cfg)
 
 	return &GithubPlaygroundOpenAIProvider{

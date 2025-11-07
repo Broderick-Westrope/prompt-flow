@@ -4,7 +4,7 @@ description: "A simple chat flow that processes user input"
 
 config:
   default_provider: "github_playground_openai"
-  default_model: "gpt-3.5-turbo"
+  default_model: "openai/gpt-4o-mini"
 
 nodes:
   - id: "chat"
