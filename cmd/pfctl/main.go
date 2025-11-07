@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/MakeNowJust/heredoc"
 	"github.com/alecthomas/kong"
 	"github.com/broderick/prompt-flow/pkg/flow"
@@ -73,55 +70,5 @@ func createSampleFlow(name string) *flow.Flow {
 				},
 			},
 		},
-	}
-}
-
-func printExecutionResult(result *flow.ExecutionResult) {
-	fmt.Printf("=== Execution Result ===\n")
-	fmt.Printf("Flow: %s\n", result.FlowName)
-	fmt.Printf("Success: %v\n", result.Success)
-	fmt.Printf("Duration: %v\n", result.Duration)
-
-	if result.Error != "" {
-		fmt.Printf("Error: %s\n", result.Error)
-	}
-
-	fmt.Printf("\n=== Node Results ===\n")
-	totalTokens := 0
-
-	for i, nodeResult := range result.NodeResults {
-		fmt.Printf("\n[%d] Node: %s\n", i+1, nodeResult.NodeID)
-		fmt.Printf("    Success: %v\n", nodeResult.Success)
-		fmt.Printf("    Duration: %v\n", nodeResult.Duration)
-
-		if nodeResult.Error != "" {
-			fmt.Printf("    Error: %s\n", nodeResult.Error)
-		}
-
-		if nodeResult.Metrics.TokensUsed > 0 {
-			fmt.Printf("    Tokens: %d (prompt: %d, completion: %d)\n",
-				nodeResult.Metrics.TokensUsed,
-				nodeResult.Metrics.PromptTokens,
-				nodeResult.Metrics.CompletionTokens)
-			fmt.Printf("    Estimated Cost: $%.6f\n", nodeResult.Metrics.EstimatedCost)
-
-			totalTokens += nodeResult.Metrics.TokensUsed
-		}
-
-		if len(nodeResult.Outputs) > 0 {
-			fmt.Printf("    Outputs:\n")
-			for key, val := range nodeResult.Outputs {
-				fmt.Printf("      %s: %v\n", key, val)
-			}
-		}
-	}
-
-	fmt.Printf("\n=== Summary ===\n")
-	fmt.Printf("Total Tokens: %d\n", totalTokens)
-
-	if len(result.Outputs) > 0 {
-		fmt.Printf("\n=== Flow Outputs ===\n")
-		outputJSON, _ := json.MarshalIndent(result.Outputs, "", "  ")
-		fmt.Println(string(outputJSON))
 	}
 }

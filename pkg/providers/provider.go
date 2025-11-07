@@ -15,19 +15,19 @@ type Provider interface {
 
 // CompletionRequest represents a request to an LLM
 type CompletionRequest struct {
-	Prompt   string            // The prompt text
-	Model    string            // Model identifier
-	Settings map[string]any    // Provider-specific settings
+	Prompt   string         // The prompt text
+	Model    string         // Model identifier
+	Settings map[string]any // Provider-specific settings
 }
 
 // CompletionResponse represents a response from an LLM
 type CompletionResponse struct {
-	Content          string  // The generated text
-	PromptTokens     int     // Tokens in the prompt
-	CompletionTokens int     // Tokens in the completion
-	TotalTokens      int     // Total tokens used
-	EstimatedCost    float64 // Estimated cost in USD
-	Model            string  // Model that was used
+	Content      string  // The generated text
+	InputTokens  int     // Tokens in the prompt
+	OutputTokens int     // Tokens in the completion
+	InputCost    float64 // Cost in USD for the input tokens
+	OutputCost   float64 // Cost in USD for the output tokens
+	Model        string  // Model that was used
 }
 
 // Registry holds all available providers

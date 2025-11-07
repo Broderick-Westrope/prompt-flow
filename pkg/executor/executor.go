@@ -231,10 +231,10 @@ func (e *Executor) executeLLMNode(
 	}
 
 	metrics := &flow.NodeMetrics{
-		TokensUsed:       resp.TotalTokens,
-		PromptTokens:     resp.PromptTokens,
-		CompletionTokens: resp.CompletionTokens,
-		EstimatedCost:    resp.EstimatedCost,
+		InputTokens:  resp.InputTokens,
+		OutputTokens: resp.OutputTokens,
+		InputCost:    resp.InputCost,
+		OutputCost:   resp.OutputCost,
 	}
 
 	return outputs, metrics, nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -66,4 +67,67 @@ func (c *TestCmd) Run() error {
 
 	printExecutionResult(result)
 	return err
+}
+
+func printExecutionResult(result *flow.ExecutionResult) {
+	fmt.Printf("=== Execution Result ===\n")
+	fmt.Printf("Flow: %s\n", result.FlowName)
+	fmt.Printf("Success: %v\n", result.Success)
+	fmt.Printf("Duration: %v\n", result.Duration)
+
+	if result.Error != "" {
+		fmt.Printf("Error: %s\n", result.Error)
+	}
+
+	fmt.Printf("\n=== Node Results ===\n")
+	totalTokens := 0
+	totalCost := 0.0
+
+	for i, nodeResult := range result.NodeResults {
+		fmt.Printf("\n[%d] Node: %s\n", i+1, nodeResult.NodeID)
+		fmt.Printf("    Success: %v\n", nodeResult.Success)
+		fmt.Printf("    Duration: %v\n", nodeResult.Duration)
+
+		if nodeResult.Error != "" {
+			fmt.Printf("    Error: %s\n", nodeResult.Error)
+		}
+
+		if nodeResult.Metrics.InputTokens > 0 {
+			fmt.Printf("    Tokens: %d (input: %d, output: %d)\n",
+				nodeResult.Metrics.InputTokens+nodeResult.Metrics.OutputTokens,
+				nodeResult.Metrics.InputTokens,
+				nodeResult.Metrics.OutputTokens)
+
+			totalTokens += nodeResult.Metrics.InputTokens
+		}
+
+		if nodeResult.Metrics.InputCost > 0 {
+			fmt.Printf("    Cost: $%.6f (input: $%.6f, output: $%.6f)\n",
+				nodeResult.Metrics.InputCost+nodeResult.Metrics.OutputCost,
+				nodeResult.Metrics.InputCost,
+				nodeResult.Metrics.OutputCost)
+
+			totalCost += nodeResult.Metrics.InputCost + nodeResult.Metrics.OutputCost
+		}
+
+		if len(nodeResult.Outputs) > 0 {
+			fmt.Printf("    Outputs:\n")
+			for key, val := range nodeResult.Outputs {
+				fmt.Printf("      %s: %v\n", key, val)
+			}
+		}
+	}
+
+	fmt.Printf("\n=== Summary ===\n")
+	fmt.Printf("Total Tokens: %d\n", totalTokens)
+
+	if totalCost > 0 {
+		fmt.Printf("Total Cost: $%.6f\n", totalCost)
+	}
+
+	if len(result.Outputs) > 0 {
+		fmt.Printf("\n=== Flow Outputs ===\n")
+		outputJSON, _ := json.MarshalIndent(result.Outputs, "", "  ")
+		fmt.Println(string(outputJSON))
+	}
 }

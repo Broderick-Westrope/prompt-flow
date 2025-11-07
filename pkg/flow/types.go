@@ -44,32 +44,32 @@ type Output struct {
 
 // ExecutionResult represents the result of executing a flow
 type ExecutionResult struct {
-	FlowName  string                 `json:"flow_name"`
-	Success   bool                   `json:"success"`
-	Error     string                 `json:"error,omitempty"`
-	Outputs   map[string]any         `json:"outputs"`
-	NodeResults []NodeResult         `json:"node_results"`
-	StartTime time.Time              `json:"start_time"`
-	EndTime   time.Time              `json:"end_time"`
-	Duration  time.Duration          `json:"duration"`
+	FlowName    string         `json:"flow_name"`
+	Success     bool           `json:"success"`
+	Error       string         `json:"error,omitempty"`
+	Outputs     map[string]any `json:"outputs"`
+	NodeResults []NodeResult   `json:"node_results"`
+	StartTime   time.Time      `json:"start_time"`
+	EndTime     time.Time      `json:"end_time"`
+	Duration    time.Duration  `json:"duration"`
 }
 
 // NodeResult represents the result of executing a single node
 type NodeResult struct {
-	NodeID    string            `json:"node_id"`
-	Success   bool              `json:"success"`
-	Error     string            `json:"error,omitempty"`
-	Outputs   map[string]any    `json:"outputs"`
-	Metrics   NodeMetrics       `json:"metrics"`
-	StartTime time.Time         `json:"start_time"`
-	EndTime   time.Time         `json:"end_time"`
-	Duration  time.Duration     `json:"duration"`
+	NodeID    string         `json:"node_id"`
+	Success   bool           `json:"success"`
+	Error     string         `json:"error,omitempty"`
+	Outputs   map[string]any `json:"outputs"`
+	Metrics   NodeMetrics    `json:"metrics"`
+	StartTime time.Time      `json:"start_time"`
+	EndTime   time.Time      `json:"end_time"`
+	Duration  time.Duration  `json:"duration"`
 }
 
 // NodeMetrics contains performance metrics for a node execution
 type NodeMetrics struct {
-	TokensUsed      int     `json:"tokens_used,omitempty"`
-	PromptTokens    int     `json:"prompt_tokens,omitempty"`
-	CompletionTokens int    `json:"completion_tokens,omitempty"`
-	EstimatedCost   float64 `json:"estimated_cost,omitempty"`
+	InputTokens  int     `json:"input_tokens,omitempty"`
+	OutputTokens int     `json:"output_tokens,omitempty"`
+	InputCost    float64 `json:"input_cost,omitempty"`
+	OutputCost   float64 `json:"output_cost,omitempty"`
 }

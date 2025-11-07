@@ -71,42 +71,43 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (*
 	}
 
 	// Calculate estimated cost (approximate pricing)
-	cost := estimateOpenAICost(req.Model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+	inputCost, outputCost := estimateOpenAICost(req.Model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 
 	return &CompletionResponse{
-		Content:          resp.Choices[0].Message.Content,
-		PromptTokens:     resp.Usage.PromptTokens,
-		CompletionTokens: resp.Usage.CompletionTokens,
-		TotalTokens:      resp.Usage.TotalTokens,
-		EstimatedCost:    cost,
-		Model:            resp.Model,
+		Content:      resp.Choices[0].Message.Content,
+		InputTokens:  resp.Usage.PromptTokens,
+		OutputTokens: resp.Usage.CompletionTokens,
+		InputCost:    inputCost,
+		OutputCost:   outputCost,
+		Model:        resp.Model,
 	}, nil
 }
 
-// estimateOpenAICost calculates approximate cost based on model and token usage
-func estimateOpenAICost(model string, promptTokens, completionTokens int) float64 {
-	// Pricing as of 2024 (per 1M tokens)
-	// These are approximate and should be updated
-	var promptCost, completionCost float64
+// estimateOpenAICost calculates approximate cost based on model and token usage.
+// Does not consider cached input or other edge cases; only standard input and output is considered.
+// Pricing as of 07/11/2025 (USD per 1M tokens).
+// https://platform.openai.com/docs/pricing?latest-pricing=standard
+func estimateOpenAICost(model string, inputTokens, outputTokens int) (float64, float64) {
+	var inputCost, outputCost float64
 
 	switch model {
-	case "gpt-4", "gpt-4-0613":
-		promptCost = 30.0     // $30 per 1M tokens
-		completionCost = 60.0 // $60 per 1M tokens
-	case "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4-1106-preview":
-		promptCost = 10.0     // $10 per 1M tokens
-		completionCost = 30.0 // $30 per 1M tokens
-	case "gpt-3.5-turbo", "gpt-3.5-turbo-0125":
-		promptCost = 0.5     // $0.50 per 1M tokens
-		completionCost = 1.5 // $1.50 per 1M tokens
-	default:
-		// Default to GPT-3.5 pricing
-		promptCost = 0.5
-		completionCost = 1.5
+	case "gpt-5":
+		inputCost = 1.25
+		outputCost = 10.0
+	case "gpt-5-mini":
+		inputCost = 0.25
+		outputCost = 2.0
+	case "gpt-5-nano":
+		inputCost = 0.05
+		outputCost = 0.4
+
+	case "gpt-4o-mini":
+		inputCost = 0.15
+		outputCost = 0.60
 	}
 
-	promptCostUSD := (float64(promptTokens) / 1_000_000.0) * promptCost
-	completionCostUSD := (float64(completionTokens) / 1_000_000.0) * completionCost
+	inputCost *= (float64(inputTokens) / 1_000_000.0)
+	outputCost *= (float64(outputTokens) / 1_000_000.0)
 
-	return promptCostUSD + completionCostUSD
+	return inputCost, outputCost
 }

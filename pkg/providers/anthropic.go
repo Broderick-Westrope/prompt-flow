@@ -70,20 +70,20 @@ func (p *AnthropicProvider) Complete(ctx context.Context, req CompletionRequest)
 	}
 
 	// Calculate estimated cost
-	cost := estimateAnthropicCost(req.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens)
+	inputCost, outputCost := estimateAnthropicCost(req.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens)
 
 	return &CompletionResponse{
-		Content:          content,
-		PromptTokens:     resp.Usage.InputTokens,
-		CompletionTokens: resp.Usage.OutputTokens,
-		TotalTokens:      resp.Usage.InputTokens + resp.Usage.OutputTokens,
-		EstimatedCost:    cost,
-		Model:            string(resp.Model),
+		Content:      content,
+		InputTokens:  resp.Usage.InputTokens,
+		OutputTokens: resp.Usage.OutputTokens,
+		InputCost:    inputCost,
+		OutputCost:   outputCost,
+		Model:        string(resp.Model),
 	}, nil
 }
 
 // estimateAnthropicCost calculates approximate cost based on model and token usage
-func estimateAnthropicCost(model string, inputTokens, outputTokens int) float64 {
+func estimateAnthropicCost(model string, inputTokens, outputTokens int) (float64, float64) {
 	// Pricing as of 2024 (per 1M tokens)
 	var inputCost, outputCost float64
 
@@ -109,5 +109,5 @@ func estimateAnthropicCost(model string, inputTokens, outputTokens int) float64 
 	inputCostUSD := (float64(inputTokens) / 1_000_000.0) * inputCost
 	outputCostUSD := (float64(outputTokens) / 1_000_000.0) * outputCost
 
-	return inputCostUSD + outputCostUSD
+	return inputCostUSD, outputCostUSD
 }

@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -73,42 +74,14 @@ func (p *GithubPlaygroundOpenAIProvider) Complete(ctx context.Context, req Compl
 	}
 
 	// Calculate estimated cost (approximate pricing)
-	cost := estimateOpenAICost(req.Model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+	inputCost, outputCost := estimateOpenAICost(strings.TrimPrefix(req.Model, "openai/"), resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 
 	return &CompletionResponse{
-		Content:          resp.Choices[0].Message.Content,
-		PromptTokens:     resp.Usage.PromptTokens,
-		CompletionTokens: resp.Usage.CompletionTokens,
-		TotalTokens:      resp.Usage.TotalTokens,
-		EstimatedCost:    cost,
-		Model:            resp.Model,
+		Content:      resp.Choices[0].Message.Content,
+		InputTokens:  resp.Usage.PromptTokens,
+		OutputTokens: resp.Usage.CompletionTokens,
+		InputCost:    inputCost,
+		OutputCost:   outputCost,
+		Model:        resp.Model,
 	}, nil
-}
-
-// estimateGithubPlaygroundCost calculates approximate cost based on model and token usage
-func estimateGithubPlaygroundCost(model string, promptTokens, completionTokens int) float64 {
-	// Pricing as of 2024 (per 1M tokens)
-	// These are approximate and should be updated
-	var promptCost, completionCost float64
-
-	switch model {
-	case "gpt-4", "gpt-4-0613":
-		promptCost = 30.0     // $30 per 1M tokens
-		completionCost = 60.0 // $60 per 1M tokens
-	case "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4-1106-preview":
-		promptCost = 10.0     // $10 per 1M tokens
-		completionCost = 30.0 // $30 per 1M tokens
-	case "gpt-3.5-turbo", "gpt-3.5-turbo-0125":
-		promptCost = 0.5     // $0.50 per 1M tokens
-		completionCost = 1.5 // $1.50 per 1M tokens
-	default:
-		// Default to GPT-3.5 pricing
-		promptCost = 0.5
-		completionCost = 1.5
-	}
-
-	promptCostUSD := (float64(promptTokens) / 1_000_000.0) * promptCost
-	completionCostUSD := (float64(completionTokens) / 1_000_000.0) * completionCost
-
-	return promptCostUSD + completionCostUSD
 }
