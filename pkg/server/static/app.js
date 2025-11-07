@@ -1,5 +1,5 @@
 const { useState, useEffect, useCallback } = React;
-const { ReactFlow, Controls, Background, MiniMap, useNodesState, useEdgesState } = ReactFlowRenderer;
+const { ReactFlow, Controls, Background, MiniMap, useNodesState, useEdgesState } = window.ReactFlow;
 
 function App() {
     const [flow, setFlow] = useState(null);
