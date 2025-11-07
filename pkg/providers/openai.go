@@ -31,7 +31,7 @@ func (p *OpenAIProvider) Name() string {
 // Complete sends a prompt to OpenAI and returns the response
 func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	if !p.apiKeySet {
-		return nil, fmt.Errorf("OpenAI API key not set (use OPENAI_API_KEY environment variable)")
+		return nil, fmt.Errorf("OpenAI Provider received an empty API key")
 	}
 
 	// Build the request

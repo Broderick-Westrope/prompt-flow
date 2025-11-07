@@ -31,7 +31,7 @@ func (p *AnthropicProvider) Name() string {
 // Complete sends a prompt to Anthropic and returns the response
 func (p *AnthropicProvider) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	if !p.apiKeySet {
-		return nil, fmt.Errorf("Anthropic API key not set (use ANTHROPIC_API_KEY environment variable)")
+		return nil, fmt.Errorf("Anthropic Provider received an empty API key")
 	}
 
 	// Get settings with defaults

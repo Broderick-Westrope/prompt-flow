@@ -33,7 +33,7 @@ func (p *GithubPlaygroundOpenAIProvider) Name() string {
 // Complete sends a prompt to Github Playground and returns the response
 func (p *GithubPlaygroundOpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	if !p.apiKeySet {
-		return nil, fmt.Errorf("GitHub Playground OpenAI PAT not set (use GITHUB_PLAYGROUND_OPENAI_PAT environment variable)")
+		return nil, fmt.Errorf("GitHub Playground OpenAI Provider received an empty API key")
 	}
 
 	// Build the request

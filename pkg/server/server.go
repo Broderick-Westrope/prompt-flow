@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/broderick/prompt-flow/pkg/executor"
@@ -29,8 +30,9 @@ type Server struct {
 // New creates a new server instance
 func New(port int, flowPath string) *Server {
 	registry := providers.NewRegistry()
-	registry.Register(providers.NewOpenAIProvider(""))
-	registry.Register(providers.NewAnthropicProvider(""))
+	registry.Register(providers.NewOpenAIProvider(os.Getenv("OPENAI_API_KEY")))
+	registry.Register(providers.NewAnthropicProvider(os.Getenv("ANTHROPIC_API_KEY")))
+	registry.Register(providers.NewGithubPlaygroundOpenAIProvider(os.Getenv("GITHUB_PLAYGROUND_PAT")))
 
 	return &Server{
 		port:     port,
@@ -158,8 +160,8 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Flow   json.RawMessage    `json:"flow"`
-		Inputs map[string]any     `json:"inputs"`
+		Flow   json.RawMessage `json:"flow"`
+		Inputs map[string]any  `json:"inputs"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
