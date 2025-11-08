@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/MakeNowJust/heredoc"
 	"github.com/broderick/prompt-flow/pkg/flow"
 )
 
@@ -38,4 +39,42 @@ func (c *InitCmd) Run() error {
 
 	fmt.Printf("Created flow definition: %s\n", outputPath)
 	return nil
+}
+
+func createSampleFlow(name string) *flow.Flow {
+	return &flow.Flow{
+		Version:     "1.0",
+		Name:        name,
+		Description: "A sample prompt flow",
+		Config: flow.Config{
+			DefaultProvider: "openai",
+			DefaultModel:    "gpt-3.5-turbo",
+		},
+		Nodes: []flow.Node{
+			{
+				ID:       "process",
+				Provider: "openai",
+				Model:    "gpt-3.5-turbo",
+				Inputs: []flow.Input{
+					{
+						Name: "user_input",
+						From: "input",
+					},
+				},
+				Prompt: heredoc.Doc(`
+					You are a helpful assistant.
+					
+					User input: {{.user_input}}
+
+					Please provide a helpful response.
+				`),
+				Outputs: []flow.Output{
+					{
+						Name: "response",
+						To:   "output",
+					},
+				},
+			},
+		},
+	}
 }
