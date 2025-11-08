@@ -30,15 +30,10 @@ type Server struct {
 
 // New creates a new server instance
 func New(port int, flowPath string, showStartEndNode bool) *Server {
-	key := os.Getenv("GITHUB_PLAYGROUND_PAT")
-	if key == "" {
-		fmt.Fprintf(os.Stderr, "warning: GITHUB_PLAYGROUND_PAT is not set, skipping GitHub Playground OpenAI provider\n")
-	}
-
 	registry := providers.NewRegistry()
 	registry.Register(providers.NewOpenAIProvider(os.Getenv("OPENAI_API_KEY")))
 	registry.Register(providers.NewAnthropicProvider(os.Getenv("ANTHROPIC_API_KEY")))
-	registry.Register(providers.NewGithubPlaygroundOpenAIProvider(key))
+	registry.Register(providers.NewGithubPlaygroundOpenAIProvider(os.Getenv("GITHUB_PLAYGROUND_PAT")))
 
 	return &Server{
 		port:             port,
