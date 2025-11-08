@@ -43,18 +43,18 @@ func (c *InitCmd) Run() error {
 
 func createSampleFlow(name string) *flow.Flow {
 	return &flow.Flow{
-		Version:     "1.0",
+		Version:     "0.1.0",
 		Name:        name,
 		Description: "A sample prompt flow",
 		Config: flow.Config{
-			DefaultProvider: "openai",
-			DefaultModel:    "gpt-3.5-turbo",
+			DefaultProvider: "github_playground_openai",
+			DefaultModel:    "openai/gpt-4o-mini",
 		},
 		Nodes: []flow.Node{
 			{
 				ID:       "process",
-				Provider: "openai",
-				Model:    "gpt-3.5-turbo",
+				Provider: "github_playground_openai",
+				Model:    "openai/gpt-4o-mini",
 				Inputs: []flow.Input{
 					{
 						Name: "user_input",
