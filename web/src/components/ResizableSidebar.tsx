@@ -14,7 +14,25 @@ export function ResizableSidebar({
 }: ResizableSidebarProps) {
   const [width, setWidth] = useState(defaultWidth);
   const [isResizing, setIsResizing] = useState(false);
+  const [maxWidth, setMaxWidth] = useState(() => window.innerWidth - 100);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Handle window resize to update max width
+  useEffect(() => {
+    const handleWindowResize = () => {
+      const newMaxWidth = window.innerWidth - 100;
+      setMaxWidth(newMaxWidth);
+
+      // Constrain current width if it exceeds new max
+      setWidth(prevWidth => Math.min(prevWidth, newMaxWidth));
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -22,7 +40,7 @@ export function ResizableSidebar({
 
       const newWidth = e.clientX;
 
-      if (newWidth >= minWidth) {
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
         setWidth(newWidth);
       }
     };
@@ -44,7 +62,7 @@ export function ResizableSidebar({
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizing, minWidth]);
+  }, [isResizing, minWidth, maxWidth]);
 
   const handleMouseDown = () => {
     setIsResizing(true);
