@@ -36,11 +36,10 @@
 }
 
 .sidebar {
-  width: 350px;
   background-color: white;
-  border-right: 1px solid #e0e0e0;
   overflow-y: auto;
   padding: 1.5rem;
+  height: 100%;
 }
 
 .sidebar h2 {

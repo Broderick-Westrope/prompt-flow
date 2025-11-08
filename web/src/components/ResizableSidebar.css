@@ -1,0 +1,27 @@
+.resizable-sidebar-container {
+  display: flex;
+  position: relative;
+}
+
+.resize-handle {
+  width: 4px;
+  background-color: #e0e0e0;
+  cursor: col-resize;
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background-color: #007bff;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -2px;
+  right: -2px;
+}

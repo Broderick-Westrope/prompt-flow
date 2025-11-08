@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { ResizableSidebar } from './components/ResizableSidebar';
 import { FlowCanvas } from './components/FlowCanvas';
 import { useFlow } from './hooks/useFlow';
 import { useConfig } from './hooks/useConfig';
@@ -84,16 +85,18 @@ function App() {
       <Header flow={flow} />
 
       <div className="main-content">
-        <Sidebar
-          flow={flow}
-          selectedNode={selectedNode}
-          inputs={inputs}
-          rootInputs={rootInputs}
-          executing={executing}
-          executionResult={executionResult}
-          onInputChange={handleInputChange}
-          onExecute={handleExecuteFlow}
-        />
+        <ResizableSidebar defaultWidth={350} minWidth={250}>
+          <Sidebar
+            flow={flow}
+            selectedNode={selectedNode}
+            inputs={inputs}
+            rootInputs={rootInputs}
+            executing={executing}
+            executionResult={executionResult}
+            onInputChange={handleInputChange}
+            onExecute={handleExecuteFlow}
+          />
+        </ResizableSidebar>
 
         <FlowCanvas
           flow={flow}
