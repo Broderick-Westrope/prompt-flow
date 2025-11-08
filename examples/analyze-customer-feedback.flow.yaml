@@ -1,0 +1,68 @@
+version: "1.0"
+name: analyze-customer-feedback
+description: Automated analysis of customer reviews.
+config:
+  default_provider: github_playground_openai
+  default_model: openai/gpt-4o-mini
+nodes:
+  - id: classify_sentiment
+    inputs:
+      - name: customer_review
+        from: input
+    prompt: |
+      Is this a positive or negative review?
+      ```
+      {{.customer_review}}
+      ```
+      How confident are you in your answer?
+
+      Please provide your answer in the following format:
+      ```
+      {
+        "sentiment": "positive" | "negative",
+        "confidence": 0.0-1.0
+      }
+      ```
+    outputs:
+      - name: sentiment
+      - name: confidence
+
+  - id: extract_topics
+    inputs:
+      - name: customer_review
+        from: input
+    prompt: |
+      Extract the most important topics/themes from the following customer review:
+      ```
+      {{.customer_review}}
+      ```
+      Please provide your answer as a list of topics/themes. Do not add any other text or formatting.
+      ```
+      [
+        "topic_1",
+        "topic_2",
+        "topic_3"
+      ]
+      ```
+    outputs:
+      - name: topics
+
+  - id: generate_summary
+    inputs:
+      - name: customer_review
+        from: input
+      - name: topics
+        from: extract_topics.topics
+      - name: sentiment
+        from: classify_sentiment.sentiment
+    prompt: |
+      Generate a concise summary of the following customer review:
+      ```
+      Topics: {{.topics}}
+      Sentiment: {{.sentiment}}
+      Review: {{.customer_review}}
+      ```
+      Please provide your answer as a summary of the review. Do not add any other text or formatting.
+    outputs:
+      - name: summary
+        to: output
