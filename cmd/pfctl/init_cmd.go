@@ -43,7 +43,7 @@ func (c *InitCmd) Run() error {
 
 func createSampleFlow(name string) *flow.Flow {
 	return &flow.Flow{
-		Version:     "0.1.0",
+		Version:     "1.0",
 		Name:        name,
 		Description: "A sample prompt flow",
 		Config: flow.Config{
