@@ -45,13 +45,8 @@ func (c *TestCmd) Run() error {
 		inputs[parts[0]] = parts[1]
 	}
 
-	// Create provider registry
-	registry := providers.NewRegistry()
-	registry.Register(providers.NewOpenAIProvider(os.Getenv("OPENAI_API_KEY")))
-	registry.Register(providers.NewAnthropicProvider(os.Getenv("ANTHROPIC_API_KEY")))
-	registry.Register(providers.NewGithubPlaygroundOpenAIProvider(os.Getenv("GITHUB_PLAYGROUND_PAT")))
-
-	// Create executor
+	// Create provider registry and executor
+	registry := providers.NewRegistry().WithDefaultProviders()
 	exec := executor.New(registry)
 
 	// Execute with timeout

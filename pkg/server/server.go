@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/broderick/prompt-flow/pkg/executor"
@@ -30,10 +29,7 @@ type Server struct {
 
 // New creates a new server instance
 func New(port int, flowPath string, showStartEndNode bool) *Server {
-	registry := providers.NewRegistry()
-	registry.Register(providers.NewOpenAIProvider(os.Getenv("OPENAI_API_KEY")))
-	registry.Register(providers.NewAnthropicProvider(os.Getenv("ANTHROPIC_API_KEY")))
-	registry.Register(providers.NewGithubPlaygroundOpenAIProvider(os.Getenv("GITHUB_PLAYGROUND_PAT")))
+	registry := providers.NewRegistry().WithDefaultProviders()
 
 	return &Server{
 		port:             port,

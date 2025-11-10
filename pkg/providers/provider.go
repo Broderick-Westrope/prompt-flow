@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"os"
 )
 
 // Provider is the interface that all LLM providers must implement
@@ -40,6 +41,17 @@ func NewRegistry() *Registry {
 	return &Registry{
 		providers: make(map[string]Provider),
 	}
+}
+
+// WithDefaultProviders registers the default providers with the following environment variables:
+//  1. OpenAI: OPENAI_API_KEY
+//  2. Anthropic: ANTHROPIC_API_KEY
+//  3. Github Playground OpenAI: GITHUB_PLAYGROUND_PAT
+func (r *Registry) WithDefaultProviders() *Registry {
+	r.Register(NewOpenAIProvider(os.Getenv("OPENAI_API_KEY")))
+	r.Register(NewAnthropicProvider(os.Getenv("ANTHROPIC_API_KEY")))
+	r.Register(NewGithubPlaygroundOpenAIProvider(os.Getenv("GITHUB_PLAYGROUND_PAT")))
+	return r
 }
 
 // Register adds a provider to the registry
