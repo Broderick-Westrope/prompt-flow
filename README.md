@@ -253,17 +253,6 @@ registry.Register(NewMyCustomProvider()) // Your provider
 
 See existing providers within `pkg/providers/` for examples.
 
-## Roadmap
-
-- [ ] Support for custom node types (HTTP calls, database queries)
-- [ ] Flow composition (call flows from other flows)
-- [ ] Conditional branching and loops
-- [ ] Live editing in web UI with auto-save
-- [ ] Flow versioning and snapshots
-- [ ] Deployment to serverless functions
-- [ ] Integration testing framework
-- [ ] Prompt variant comparison (A/B testing)
-
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
