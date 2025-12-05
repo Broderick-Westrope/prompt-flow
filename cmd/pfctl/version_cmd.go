@@ -5,6 +5,6 @@ import "fmt"
 type VersionCmd struct{}
 
 func (c *VersionCmd) Run() error {
-	fmt.Printf("pfctl version %s\n", version)
+	fmt.Printf("%s version %s\n", appName, version)
 	return nil
 }

@@ -4,7 +4,8 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-var (
+const (
+	appName = "pfctl"
 	version = "0.1.0"
 )
 
@@ -20,7 +21,7 @@ func main() {
 	cli := &CLI{}
 
 	ctx := kong.Parse(cli,
-		kong.Name("pfctl"),
+		kong.Name(appName),
 		kong.Description("Prompt Flow Control - A tool for managing prompt flows"),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{
