@@ -17,14 +17,12 @@ type Executor struct {
 	registry *providers.Registry
 }
 
-// New creates a new executor
 func New(registry *providers.Registry) *Executor {
 	return &Executor{
 		registry: registry,
 	}
 }
 
-// Execute runs a flow with the given inputs
 func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]any) (*flow.ExecutionResult, error) {
 	startTime := time.Now()
 
@@ -36,15 +34,14 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 		StartTime:   startTime,
 	}
 
-	// Validate flow first
-	if err := flow.Validate(f); err != nil {
+	err := flow.Validate(f)
+	if err != nil {
 		result.Error = fmt.Sprintf("validation failed: %v", err)
 		result.EndTime = time.Now()
 		result.Duration = time.Since(startTime)
 		return result, err
 	}
 
-	// Build execution order using topological sort
 	execOrder, err := e.topologicalSort(f)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to build execution order: %v", err)
@@ -53,10 +50,7 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 		return result, err
 	}
 
-	// Storage for node outputs
-	nodeOutputs := make(map[string]map[string]any) // nodeID -> outputName -> value
-
-	// Execute nodes in order
+	nodeOutputs := make(map[string]map[string]any)
 	for _, node := range execOrder {
 		nodeResult, err := e.executeNode(ctx, f, node, inputs, nodeOutputs)
 		result.NodeResults = append(result.NodeResults, *nodeResult)
@@ -68,11 +62,9 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 			return result, err
 		}
 
-		// Store node outputs
 		nodeOutputs[node.ID] = nodeResult.Outputs
 	}
 
-	// Collect flow outputs
 	for _, node := range f.Nodes {
 		for _, output := range node.Outputs {
 			if output.To == "output" {

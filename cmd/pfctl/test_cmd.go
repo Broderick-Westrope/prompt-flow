@@ -4,34 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/broderick/prompt-flow/pkg/executor"
 	"github.com/broderick/prompt-flow/pkg/flow"
 	"github.com/broderick/prompt-flow/pkg/providers"
+	"github.com/fatih/color"
 )
 
 type TestCmd struct {
 	FlowFile string        `arg:"" help:"Path to flow definition file"`
 	Input    []string      `short:"i" help:"Input values as key=value pairs"`
 	Timeout  time.Duration `short:"t" default:"5m" help:"Execution timeout"`
+	Plain    bool          `help:"Disable color output"`
 }
 
 func (c *TestCmd) Run() error {
-	// Parse the flow
 	f, err := flow.Parse(c.FlowFile)
 	if err != nil {
 		return fmt.Errorf("failed to parse flow: %w", err)
 	}
 
-	// Validate the flow
-	if err := flow.Validate(f); err != nil {
+	err = flow.Validate(f)
+	if err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Parse inputs
 	inputs := make(map[string]any)
 	for _, arg := range c.Input {
 		parts := strings.SplitN(arg, "=", 2)
@@ -45,11 +44,9 @@ func (c *TestCmd) Run() error {
 		inputs[parts[0]] = parts[1]
 	}
 
-	// Create provider registry and executor
 	registry := providers.NewRegistry().WithDefaultProviders()
 	exec := executor.New(registry)
 
-	// Execute with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
@@ -57,7 +54,10 @@ func (c *TestCmd) Run() error {
 
 	result, err := exec.Execute(ctx, f, inputs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Execution failed: %v\n\n", err)
+		red := noColorIfFlagSet(c.Plain, color.FgRed)
+		fmt.Printf("%s Execution %s:\n", red("✗"), red("failed"))
+		fmt.Printf("%s\n", err)
+		return nil
 	}
 
 	printExecutionResult(result)

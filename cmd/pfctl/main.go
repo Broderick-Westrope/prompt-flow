@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/alecthomas/kong"
+	"github.com/fatih/color"
 )
 
 const (
@@ -31,4 +34,11 @@ func main() {
 
 	err := ctx.Run()
 	ctx.FatalIfErrorf(err)
+}
+
+func noColorIfFlagSet(noColor bool, attr color.Attribute) func(a ...any) string {
+	if noColor {
+		return func(a ...any) string { return fmt.Sprint(a...) }
+	}
+	return color.New(attr).SprintFunc()
 }
