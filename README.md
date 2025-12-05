@@ -39,7 +39,7 @@ This repo contains an open-source implementation of prompt flows. It is built wi
 If you have Go installed you may install the tool as follows:
 
 ```bash
-go install ./cmd/pfctl
+go install github.com/broderick/prompt-flow/cmd/pfctl
 ```
 
 Follow [these steps](https://go.dev/doc/install) to install Go if you would like to use it.
