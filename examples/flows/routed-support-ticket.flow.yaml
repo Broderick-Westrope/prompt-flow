@@ -1,0 +1,76 @@
+version: "1.0"
+name: "routed-support-ticket"
+description: "Classifies support tickets and routes to department-specific handlers using router nodes"
+
+config:
+  default_provider: "github_playground_openai"
+  default_model: "openai/gpt-4o-mini"
+
+nodes:
+  - id: classifier
+    type: llm
+    inputs:
+      - name: ticket_text
+        from: input
+    prompt: |
+      Classify this support ticket into exactly one category: billing, technical, general.
+      Output only the category name, lowercase, with no punctuation or extra text.
+
+      Ticket: {{.ticket_text}}
+    outputs:
+      - name: category
+
+  - id: route_department
+    type: router
+    inputs:
+      - name: category
+        from: classifier.category
+    routes:
+      - when: '== "billing"'
+        next: handle_billing
+      - when: '== "technical"'
+        next: handle_technical
+      - default: true
+        next: handle_general
+
+  - id: handle_billing
+    type: llm
+    inputs:
+      - name: ticket_text
+        from: input
+    prompt: |
+      You are a billing department support agent. Draft a helpful response for this ticket.
+      Focus on payment, invoicing, and account-related concerns.
+
+      Ticket: {{.ticket_text}}
+    outputs:
+      - name: response
+        to: output
+
+  - id: handle_technical
+    type: llm
+    inputs:
+      - name: ticket_text
+        from: input
+    prompt: |
+      You are a technical support agent. Draft a helpful response for this ticket.
+      Focus on troubleshooting, technical issues, and product functionality.
+
+      Ticket: {{.ticket_text}}
+    outputs:
+      - name: response
+        to: output
+
+  - id: handle_general
+    type: llm
+    inputs:
+      - name: ticket_text
+        from: input
+    prompt: |
+      You are a general support agent. Draft a helpful response for this ticket.
+      Be friendly and address the customer's concerns.
+
+      Ticket: {{.ticket_text}}
+    outputs:
+      - name: response
+        to: output
