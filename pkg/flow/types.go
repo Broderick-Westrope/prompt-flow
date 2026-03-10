@@ -21,12 +21,21 @@ type Config struct {
 // Node represents a single node in the flow
 type Node struct {
 	ID       string         `yaml:"id" json:"id"`
+	Type     string         `yaml:"type,omitempty" json:"type,omitempty"`
 	Provider string         `yaml:"provider,omitempty" json:"provider,omitempty"`
 	Model    string         `yaml:"model,omitempty" json:"model,omitempty"`
 	Inputs   []Input        `yaml:"inputs" json:"inputs"`
 	Prompt   string         `yaml:"prompt,omitempty" json:"prompt,omitempty"`
 	Outputs  []Output       `yaml:"outputs" json:"outputs"`
+	Routes   []Route        `yaml:"routes,omitempty" json:"routes,omitempty"`
 	Settings map[string]any `yaml:"settings,omitempty" json:"settings,omitempty"`
+}
+
+// Route represents a conditional branch in a router node
+type Route struct {
+	When    string `yaml:"when,omitempty" json:"when,omitempty"`
+	Default bool   `yaml:"default,omitempty" json:"default,omitempty"`
+	Next    string `yaml:"next" json:"next"`
 }
 
 // Input represents an input to a node
@@ -57,6 +66,7 @@ type ExecutionResult struct {
 type NodeResult struct {
 	NodeID    string         `json:"node_id"`
 	Success   bool           `json:"success"`
+	Skipped   bool           `json:"skipped,omitempty"`
 	Error     string         `json:"error,omitempty"`
 	Outputs   map[string]any `json:"outputs"`
 	Metrics   NodeMetrics    `json:"metrics"`

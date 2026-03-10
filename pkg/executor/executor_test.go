@@ -471,6 +471,15 @@ func indexOf(slice []string, val string) int {
 	return -1
 }
 
+func findNodeResult(result *flow.ExecutionResult, nodeID string) *flow.NodeResult {
+	for i := range result.NodeResults {
+		if result.NodeResults[i].NodeID == nodeID {
+			return &result.NodeResults[i]
+		}
+	}
+	return nil
+}
+
 func TestExecute_ProviderError(t *testing.T) {
 	mock := newMockProvider("mock")
 	mock.err = fmt.Errorf("rate limit exceeded")
@@ -548,5 +557,323 @@ func TestExecute_NodeLevelProviderOverride(t *testing.T) {
 	}
 	if result.Outputs["result"] != "from override" {
 		t.Errorf("expected output 'from override', got %q", result.Outputs["result"])
+	}
+}
+
+// --- Router node tests ---
+
+func TestExecute_RouterSelectsCorrectBranch(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Classify: help me with billing"] = "billing"
+	mock.responses["Handle billing: billing"] = "billing handled"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify: {{.user_input}}",
+			Inputs:  []flow.Input{{Name: "user_input", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "billing"`, Next: "handle_billing"},
+				{Default: true, Next: "handle_other"},
+			},
+		},
+		{
+			ID:      "handle_billing",
+			Type:    "llm",
+			Prompt:  "Handle billing: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_other",
+			Type:    "llm",
+			Prompt:  "Handle other: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"user_input": "help me with billing"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got error: %s", result.Error)
+	}
+
+	// handle_billing should have executed
+	billingResult := findNodeResult(result, "handle_billing")
+	if billingResult == nil {
+		t.Fatal("expected handle_billing node result")
+	}
+	if billingResult.Skipped {
+		t.Error("expected handle_billing to NOT be skipped")
+	}
+
+	// handle_other should be skipped
+	otherResult := findNodeResult(result, "handle_other")
+	if otherResult == nil {
+		t.Fatal("expected handle_other node result")
+	}
+	if !otherResult.Skipped {
+		t.Error("expected handle_other to be skipped")
+	}
+}
+
+func TestExecute_RouterSkippedBranchNoLLMCall(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Classify: test"] = "billing"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify: {{.user_input}}",
+			Inputs:  []flow.Input{{Name: "user_input", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "billing"`, Next: "handle_billing"},
+				{Default: true, Next: "handle_other"},
+			},
+		},
+		{
+			ID:      "handle_billing",
+			Type:    "llm",
+			Prompt:  "Handle billing: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_other",
+			Type:    "llm",
+			Prompt:  "Handle other: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	_, err := exec.Execute(context.Background(), f, map[string]any{"user_input": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Mock should have been called exactly twice: classifier + handle_billing
+	// handle_other should NOT have triggered a provider call
+	if len(mock.calls) != 2 {
+		t.Errorf("expected 2 provider calls (classifier + handle_billing), got %d", len(mock.calls))
+	}
+}
+
+func TestExecute_RouterDefaultRouteUsed(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Classify: mystery"] = "unknown_category"
+	mock.responses["Handle other: unknown_category"] = "other handled"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify: {{.user_input}}",
+			Inputs:  []flow.Input{{Name: "user_input", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "billing"`, Next: "handle_billing"},
+				{Default: true, Next: "handle_other"},
+			},
+		},
+		{
+			ID:      "handle_billing",
+			Type:    "llm",
+			Prompt:  "Handle billing: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_other",
+			Type:    "llm",
+			Prompt:  "Handle other: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"user_input": "mystery"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got error: %s", result.Error)
+	}
+
+	// handle_other should have executed (default route)
+	otherResult := findNodeResult(result, "handle_other")
+	if otherResult == nil {
+		t.Fatal("expected handle_other node result")
+	}
+	if otherResult.Skipped {
+		t.Error("expected handle_other to NOT be skipped")
+	}
+
+	// handle_billing should be skipped
+	billingResult := findNodeResult(result, "handle_billing")
+	if billingResult == nil {
+		t.Fatal("expected handle_billing node result")
+	}
+	if !billingResult.Skipped {
+		t.Error("expected handle_billing to be skipped")
+	}
+}
+
+func TestExecute_RouterNoMatchNoDefault(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Classify: mystery"] = "unknown"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify: {{.user_input}}",
+			Inputs:  []flow.Input{{Name: "user_input", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "billing"`, Next: "handle_billing"},
+				{When: `== "technical"`, Next: "handle_technical"},
+			},
+		},
+		{
+			ID:      "handle_billing",
+			Type:    "llm",
+			Prompt:  "Handle billing",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_technical",
+			Type:    "llm",
+			Prompt:  "Handle technical",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	_, err := exec.Execute(context.Background(), f, map[string]any{"user_input": "mystery"})
+	if err == nil {
+		t.Fatal("expected error when no route matches and no default, got nil")
+	}
+	if !strings.Contains(err.Error(), "no route matched") {
+		t.Errorf("expected error containing 'no route matched', got %q", err.Error())
+	}
+}
+
+func TestExecute_RouterTransitiveSkipping(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Classify: test"] = "billing"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify: {{.user_input}}",
+			Inputs:  []flow.Input{{Name: "user_input", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "billing"`, Next: "handle_billing"},
+				{Default: true, Next: "handle_other"},
+			},
+		},
+		{
+			ID:      "handle_billing",
+			Type:    "llm",
+			Prompt:  "Handle billing: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_other",
+			Type:    "llm",
+			Prompt:  "Handle other: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:      "follow_up",
+			Type:    "llm",
+			Prompt:  "Follow up: {{.other_result}}",
+			Inputs:  []flow.Input{{Name: "other_result", From: "handle_other.result"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"user_input": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got error: %s", result.Error)
+	}
+
+	// handle_other should be skipped
+	otherResult := findNodeResult(result, "handle_other")
+	if otherResult == nil {
+		t.Fatal("expected handle_other node result")
+	}
+	if !otherResult.Skipped {
+		t.Error("expected handle_other to be skipped")
+	}
+
+	// follow_up depends on handle_other, so it should also be skipped
+	followUpResult := findNodeResult(result, "follow_up")
+	if followUpResult == nil {
+		t.Fatal("expected follow_up node result")
+	}
+	if !followUpResult.Skipped {
+		t.Error("expected follow_up to be skipped (transitive)")
+	}
+
+	// Only classifier + handle_billing should have made provider calls
+	if len(mock.calls) != 2 {
+		t.Errorf("expected 2 provider calls, got %d", len(mock.calls))
 	}
 }

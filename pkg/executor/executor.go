@@ -51,7 +51,24 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 	}
 
 	nodeOutputs := make(map[string]map[string]any)
+	skippedNodes := make(map[string]bool)
+
 	for _, node := range execOrder {
+		// Check if this node should be skipped
+		if skippedNodes[node.ID] {
+			nodeResult := &flow.NodeResult{
+				NodeID:    node.ID,
+				Success:   true,
+				Skipped:   true,
+				Outputs:   make(map[string]any),
+				StartTime: time.Now(),
+				EndTime:   time.Now(),
+			}
+			result.NodeResults = append(result.NodeResults, *nodeResult)
+			nodeOutputs[node.ID] = nodeResult.Outputs
+			continue
+		}
+
 		nodeResult, err := e.executeNode(ctx, f, node, inputs, nodeOutputs)
 		result.NodeResults = append(result.NodeResults, *nodeResult)
 
@@ -63,6 +80,16 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 		}
 
 		nodeOutputs[node.ID] = nodeResult.Outputs
+
+		// If this was a router node, mark unselected branches as skipped
+		if node.Type == "router" {
+			selectedNext, _ := nodeResult.Outputs["selected"].(string)
+			for _, route := range node.Routes {
+				if route.Next != selectedNext {
+					markSkipped(skippedNodes, route.Next, f)
+				}
+			}
+		}
 	}
 
 	for _, node := range f.Nodes {
@@ -142,16 +169,33 @@ func (e *Executor) executeNode(
 		}
 	}
 
-	// TODO: support other node types?
-	output, metrics, err := e.executeLLMNode(ctx, f, node, inputData)
-	if err != nil {
+	switch node.Type {
+	case "", "llm":
+		output, metrics, err := e.executeLLMNode(ctx, f, node, inputData)
+		if err != nil {
+			result.Error = err.Error()
+			result.EndTime = time.Now()
+			result.Duration = time.Since(startTime)
+			return result, err
+		}
+		result.Outputs = output
+		result.Metrics = *metrics
+	case "router":
+		output, err := e.executeRouterNode(node, inputData)
+		if err != nil {
+			result.Error = err.Error()
+			result.EndTime = time.Now()
+			result.Duration = time.Since(startTime)
+			return result, err
+		}
+		result.Outputs = output
+	default:
+		err := fmt.Errorf("unknown node type: %s", node.Type)
 		result.Error = err.Error()
 		result.EndTime = time.Now()
 		result.Duration = time.Since(startTime)
 		return result, err
 	}
-	result.Outputs = output
-	result.Metrics = *metrics
 
 	result.Success = true
 	result.EndTime = time.Now()
@@ -261,6 +305,18 @@ func (e *Executor) topologicalSort(f *flow.Flow) ([]*flow.Node, error) {
 		}
 	}
 
+	// Add router route edges
+	for _, node := range f.Nodes {
+		if node.Type == "router" {
+			for _, route := range node.Routes {
+				if route.Next != "" {
+					adjList[node.ID] = append(adjList[node.ID], route.Next)
+					inDegree[route.Next]++
+				}
+			}
+		}
+	}
+
 	// Kahn's algorithm for topological sort
 	queue := []string{}
 	for nodeID, degree := range inDegree {
@@ -289,4 +345,73 @@ func (e *Executor) topologicalSort(f *flow.Flow) ([]*flow.Node, error) {
 	}
 
 	return result, nil
+}
+
+func (e *Executor) executeRouterNode(node *flow.Node, inputData map[string]any) (map[string]any, error) {
+	// Get the first input value as the routing value
+	var routeValue string
+	var found bool
+	for _, input := range node.Inputs {
+		if val, ok := inputData[input.Name]; ok {
+			routeValue = strings.TrimSpace(fmt.Sprintf("%v", val))
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("router node %s: no input value available for routing", node.ID)
+	}
+
+	// Evaluate routes
+	var defaultRoute *flow.Route
+	for i := range node.Routes {
+		route := &node.Routes[i]
+		if route.Default {
+			defaultRoute = route
+			continue
+		}
+
+		matched, err := EvaluateRouteExpression(routeValue, route.When)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate route expression %q: %w", route.When, err)
+		}
+		if matched {
+			return map[string]any{"selected": route.Next}, nil
+		}
+	}
+
+	// Use default if available
+	if defaultRoute != nil {
+		return map[string]any{"selected": defaultRoute.Next}, nil
+	}
+
+	return nil, fmt.Errorf("no route matched for value %q and no default route defined", routeValue)
+}
+
+func markSkipped(skippedNodes map[string]bool, nodeID string, f *flow.Flow) {
+	if skippedNodes[nodeID] {
+		return
+	}
+	skippedNodes[nodeID] = true
+
+	// Propagate through input dependencies
+	for _, node := range f.Nodes {
+		for _, input := range node.Inputs {
+			if input.From != "input" {
+				parts := strings.SplitN(input.From, ".", 2)
+				if len(parts) == 2 && parts[0] == nodeID {
+					markSkipped(skippedNodes, node.ID, f)
+				}
+			}
+		}
+	}
+
+	// Propagate through router route edges (if skipped node is a router)
+	for _, node := range f.Nodes {
+		if node.ID == nodeID && node.Type == "router" {
+			for _, route := range node.Routes {
+				markSkipped(skippedNodes, route.Next, f)
+			}
+		}
+	}
 }
