@@ -350,11 +350,16 @@ func (e *Executor) topologicalSort(f *flow.Flow) ([]*flow.Node, error) {
 func (e *Executor) executeRouterNode(node *flow.Node, inputData map[string]any) (map[string]any, error) {
 	// Get the first input value as the routing value
 	var routeValue string
+	var found bool
 	for _, input := range node.Inputs {
 		if val, ok := inputData[input.Name]; ok {
-			routeValue = fmt.Sprintf("%v", val)
+			routeValue = strings.TrimSpace(fmt.Sprintf("%v", val))
+			found = true
 			break
 		}
+	}
+	if !found {
+		return nil, fmt.Errorf("router node %s: no input value available for routing", node.ID)
 	}
 
 	// Evaluate routes
@@ -388,7 +393,8 @@ func markSkipped(skippedNodes map[string]bool, nodeID string, f *flow.Flow) {
 		return
 	}
 	skippedNodes[nodeID] = true
-	// Find nodes that depend on this skipped node and skip them too
+
+	// Propagate through input dependencies
 	for _, node := range f.Nodes {
 		for _, input := range node.Inputs {
 			if input.From != "input" {
@@ -396,6 +402,15 @@ func markSkipped(skippedNodes map[string]bool, nodeID string, f *flow.Flow) {
 				if len(parts) == 2 && parts[0] == nodeID {
 					markSkipped(skippedNodes, node.ID, f)
 				}
+			}
+		}
+	}
+
+	// Propagate through router route edges (if skipped node is a router)
+	for _, node := range f.Nodes {
+		if node.ID == nodeID && node.Type == "router" {
+			for _, route := range node.Routes {
+				markSkipped(skippedNodes, route.Next, f)
 			}
 		}
 	}

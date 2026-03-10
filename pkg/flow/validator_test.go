@@ -327,7 +327,7 @@ func validRouterFlow() *Flow {
 				Type: "router",
 				Inputs: []Input{{Name: "value", From: "classify.category"}},
 				Routes: []Route{
-					{When: "value == 'positive'", Next: "handle_positive"},
+					{When: `== "positive"`, Next: "handle_positive"},
 					{Default: true, Next: "handle_negative"},
 				},
 			},

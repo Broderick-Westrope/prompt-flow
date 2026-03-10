@@ -39,6 +39,12 @@ func EvaluateRouteExpression(value string, expression string) (bool, error) {
 
 	operand := rest[:lastQuote]
 
+	// Reject trailing content after closing quote
+	trailing := strings.TrimSpace(rest[lastQuote+1:])
+	if trailing != "" {
+		return false, fmt.Errorf("unexpected content after closing quote: %s", expression)
+	}
+
 	switch operator {
 	case "==":
 		return value == operand, nil

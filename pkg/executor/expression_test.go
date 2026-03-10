@@ -153,6 +153,14 @@ func TestEvaluateRouteExpression(t *testing.T) {
 			expression: `"foo"`,
 			wantErr:    "unknown operator: ",
 		},
+
+		// Error: trailing content after closing quote
+		{
+			name:       "error on trailing content after quote",
+			value:      "billing",
+			expression: `== "billing" AND something`,
+			wantErr:    `unexpected content after closing quote: == "billing" AND something`,
+		},
 	}
 
 	for _, tt := range tests {
