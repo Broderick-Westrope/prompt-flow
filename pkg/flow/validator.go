@@ -29,6 +29,14 @@ func Validate(flow *Flow) error {
 		return ValidationError{Field: "nodes", Message: "at least one node is required"}
 	}
 
+	// Build complete set of all node IDs (for forward reference validation)
+	allNodeIDs := make(map[string]bool)
+	for _, node := range flow.Nodes {
+		if node.ID != "" {
+			allNodeIDs[node.ID] = true
+		}
+	}
+
 	// Check for unique node IDs
 	nodeIDs := make(map[string]bool)
 	for i, node := range flow.Nodes {
@@ -48,7 +56,7 @@ func Validate(flow *Flow) error {
 		nodeIDs[node.ID] = true
 
 		// Validate node
-		if err := validateNode(&node, nodeIDs); err != nil {
+		if err := validateNode(&node, nodeIDs, allNodeIDs); err != nil {
 			return fmt.Errorf("node %s: %w", node.ID, err)
 		}
 	}
@@ -66,7 +74,18 @@ func Validate(flow *Flow) error {
 	return nil
 }
 
-func validateNode(node *Node, existingIDs map[string]bool) error {
+func validateNode(node *Node, existingIDs map[string]bool, allNodeIDs map[string]bool) error {
+	switch node.Type {
+	case "", "llm":
+		return validateLLMNode(node, existingIDs)
+	case "router":
+		return validateRouterNode(node, allNodeIDs)
+	default:
+		return ValidationError{Field: "type", Message: fmt.Sprintf("unknown node type: %s", node.Type)}
+	}
+}
+
+func validateLLMNode(node *Node, existingIDs map[string]bool) error {
 	if node.Prompt == "" {
 		return ValidationError{Field: "prompt", Message: "prompt is required"}
 	}
@@ -116,6 +135,78 @@ func validateNode(node *Node, existingIDs map[string]bool) error {
 	return nil
 }
 
+func validateRouterNode(node *Node, allNodeIDs map[string]bool) error {
+	// Router nodes must not have a prompt
+	if node.Prompt != "" {
+		return ValidationError{Field: "prompt", Message: "router nodes must not have a prompt"}
+	}
+
+	// Must have at least one input
+	if len(node.Inputs) == 0 {
+		return ValidationError{Field: "inputs", Message: "router nodes must have at least one input"}
+	}
+
+	// Validate inputs
+	for i, input := range node.Inputs {
+		if input.Name == "" {
+			return ValidationError{
+				Field:   fmt.Sprintf("inputs[%d].name", i),
+				Message: "input name is required",
+			}
+		}
+		if input.From == "" {
+			return ValidationError{
+				Field:   fmt.Sprintf("inputs[%d].from", i),
+				Message: "input source is required",
+			}
+		}
+	}
+
+	// Must have at least one route
+	if len(node.Routes) == 0 {
+		return ValidationError{Field: "routes", Message: "router nodes must have at least one route"}
+	}
+
+	defaultCount := 0
+	for i, route := range node.Routes {
+		// Each route must have a next target
+		if route.Next == "" {
+			return ValidationError{
+				Field:   fmt.Sprintf("routes[%d].next", i),
+				Message: "route must have a next target",
+			}
+		}
+
+		// Non-default routes must have a when expression
+		if !route.Default && route.When == "" {
+			return ValidationError{
+				Field:   fmt.Sprintf("routes[%d].when", i),
+				Message: "non-default route must have a when expression",
+			}
+		}
+
+		// Count defaults
+		if route.Default {
+			defaultCount++
+		}
+
+		// Validate next target references an existing node
+		if !allNodeIDs[route.Next] {
+			return ValidationError{
+				Field:   fmt.Sprintf("routes[%d].next", i),
+				Message: fmt.Sprintf("route next target does not exist: %s", route.Next),
+			}
+		}
+	}
+
+	// At most one default route
+	if defaultCount > 1 {
+		return ValidationError{Field: "routes", Message: "router nodes must have at most one default route"}
+	}
+
+	return nil
+}
+
 func validateReferences(flow *Flow) error {
 	// Build a map of available outputs
 	availableOutputs := make(map[string]map[string]bool) // nodeID -> outputName -> true
@@ -124,6 +215,10 @@ func validateReferences(flow *Flow) error {
 		availableOutputs[node.ID] = make(map[string]bool)
 		for _, output := range node.Outputs {
 			availableOutputs[node.ID][output.Name] = true
+		}
+		// Router nodes expose a synthetic "selected" output
+		if node.Type == "router" {
+			availableOutputs[node.ID]["selected"] = true
 		}
 	}
 
@@ -172,11 +267,20 @@ func checkCycles(flow *Flow) error {
 	graph := make(map[string][]string)
 	for _, node := range flow.Nodes {
 		graph[node.ID] = []string{}
+		// Input dependencies: edge from input source -> this node
 		for _, input := range node.Inputs {
 			if input.From != "input" {
 				parts := strings.SplitN(input.From, ".", 2)
 				if len(parts) == 2 {
 					graph[node.ID] = append(graph[node.ID], parts[0])
+				}
+			}
+		}
+		// Router route edges: route targets depend on the router
+		if node.Type == "router" {
+			for _, route := range node.Routes {
+				if route.Next != "" {
+					graph[route.Next] = append(graph[route.Next], node.ID)
 				}
 			}
 		}

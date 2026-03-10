@@ -308,3 +308,186 @@ func TestValidate_ReturnsValidationError(t *testing.T) {
 	}
 }
 
+// validRouterFlow returns a flow with an LLM node feeding into a router node
+// that branches to two downstream LLM nodes.
+func validRouterFlow() *Flow {
+	return &Flow{
+		Version: "1.0",
+		Name:    "router-flow",
+		Nodes: []Node{
+			{
+				ID:      "classify",
+				Type:    "llm",
+				Prompt:  "Classify: {{.text}}",
+				Inputs:  []Input{{Name: "text", From: "input"}},
+				Outputs: []Output{{Name: "category"}},
+			},
+			{
+				ID:   "router",
+				Type: "router",
+				Inputs: []Input{{Name: "value", From: "classify.category"}},
+				Routes: []Route{
+					{When: "value == 'positive'", Next: "handle_positive"},
+					{Default: true, Next: "handle_negative"},
+				},
+			},
+			{
+				ID:      "handle_positive",
+				Type:    "llm",
+				Prompt:  "Handle positive: {{.value}}",
+				Inputs:  []Input{{Name: "value", From: "router.selected"}},
+				Outputs: []Output{{Name: "result", To: "output"}},
+			},
+			{
+				ID:      "handle_negative",
+				Type:    "llm",
+				Prompt:  "Handle negative: {{.value}}",
+				Inputs:  []Input{{Name: "value", From: "router.selected"}},
+				Outputs: []Output{{Name: "result", To: "output"}},
+			},
+		},
+	}
+}
+
+func TestValidate_ValidRouterNode(t *testing.T) {
+	if err := Validate(validRouterFlow()); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidate_RouterNoRoutes(t *testing.T) {
+	f := validRouterFlow()
+	// Clear routes on the router node
+	f.Nodes[1].Routes = nil
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "at least one route") {
+		t.Errorf("error = %q, want substring about routes", err.Error())
+	}
+}
+
+func TestValidate_RouterNoInputs(t *testing.T) {
+	f := validRouterFlow()
+	f.Nodes[1].Inputs = nil
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "at least one input") {
+		t.Errorf("error = %q, want substring about inputs", err.Error())
+	}
+}
+
+func TestValidate_RouterInvalidNextTarget(t *testing.T) {
+	f := validRouterFlow()
+	f.Nodes[1].Routes = []Route{
+		{When: "value == 'x'", Next: "nonexistent_node"},
+	}
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "route next target does not exist") {
+		t.Errorf("error = %q, want substring about missing target", err.Error())
+	}
+}
+
+func TestValidate_RouterMultipleDefaults(t *testing.T) {
+	f := validRouterFlow()
+	f.Nodes[1].Routes = []Route{
+		{Default: true, Next: "handle_positive"},
+		{Default: true, Next: "handle_negative"},
+	}
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "at most one default") {
+		t.Errorf("error = %q, want substring about default routes", err.Error())
+	}
+}
+
+func TestValidate_RouterWithPrompt(t *testing.T) {
+	f := validRouterFlow()
+	f.Nodes[1].Prompt = "should not have a prompt"
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "must not have a prompt") {
+		t.Errorf("error = %q, want substring about prompt", err.Error())
+	}
+}
+
+func TestValidate_MixedLLMAndRouterNodes(t *testing.T) {
+	// validRouterFlow already has mixed LLM + router nodes
+	if err := Validate(validRouterFlow()); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidate_CycleThroughRouterRoutes(t *testing.T) {
+	f := &Flow{
+		Version: "1.0",
+		Name:    "router-cycle",
+		Nodes: []Node{
+			{
+				ID:      "start",
+				Type:    "llm",
+				Prompt:  "start",
+				Inputs:  []Input{{Name: "in", From: "input"}},
+				Outputs: []Output{{Name: "out"}},
+			},
+			{
+				ID:     "router",
+				Type:   "router",
+				Inputs: []Input{{Name: "value", From: "start.out"}},
+				Routes: []Route{
+					{When: "value == 'loop'", Next: "loopback"},
+					{Default: true, Next: "start"},
+				},
+			},
+			{
+				ID:      "loopback",
+				Type:    "llm",
+				Prompt:  "loop",
+				Inputs:  []Input{{Name: "in", From: "router.selected"}},
+				Outputs: []Output{{Name: "out"}},
+			},
+		},
+	}
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected cycle detection error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error = %q, want substring 'cycle'", err.Error())
+	}
+}
+
+func TestValidate_BackwardCompatNoTypeField(t *testing.T) {
+	// Existing flows without Type field should still validate
+	f := validFlow()
+	// Ensure Type is empty (zero value)
+	if f.Nodes[0].Type != "" {
+		t.Fatal("expected empty type for backward compat test")
+	}
+	if err := Validate(f); err != nil {
+		t.Fatalf("expected no error for flow without type field, got: %v", err)
+	}
+}
+
+func TestValidate_UnknownNodeType(t *testing.T) {
+	f := validFlow()
+	f.Nodes[0].Type = "unknown_type"
+	err := Validate(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown node type") {
+		t.Errorf("error = %q, want substring about unknown type", err.Error())
+	}
+}
+
