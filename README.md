@@ -122,10 +122,10 @@ This table shows what environment variable to use for each provider:
 | ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | openai                   | OPENAI_API_KEY        | [API Key](https://platform.openai.com/api-keys)                                                                                                                                                                                                                                  |
 | anthropic                | ANTHROPIC_API_KEY     | [API Key](https://console.anthropic.com/settings/keys)                                                                                                                                                                                                                           |
-| vertex_ai                | GCP_PROJECT_ID        | GCP Project ID (also requires [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials): run `gcloud auth application-default login`). Optionally set `GCP_LOCATION` (defaults to `us-central1`). |
+| vertex_ai                | GCP_PROJECT_ID        | GCP Project ID (also requires [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials): run `gcloud auth application-default login`). Optionally set `GCP_LOCATION` (defaults to `us-central1`).                          |
 | github_playground_openai | GITHUB_PLAYGROUND_PAT | [Personal Access Token](https://github.com/settings/personal-access-tokens/new?description=Used+to+call+GitHub+Models+APIs+to+easily+run+LLMs%3A+https%3A%2F%2Fdocs.github.com%2Fgithub-models%2Fquickstart%23step-2-make-an-api-call&name=GitHub+Models+token&user_models=read) |
 
-> **TIP:**\
+> 💡 **TIP:**\
 > [GitHub Playground](https://github.com/marketplace/models/azure-openai/gpt-4o-mini/playground) is a great service for developers to test different models without paying.
 
 \
@@ -153,17 +153,17 @@ pfctl serve my-first-flow.flow.yaml
 
 This will start the server. Be sure to let it run. Open http://localhost:8080 to visualize and test your flow in the browser. The GIF at the top of this document is a demo of the UI.
 
-| Flag | Default | Description |
-| ---- | ------- | ----------- |
-| `-p` | 8080    | Port to listen on |
-| `-t` | 5m      | Execution timeout for flow runs |
+| Flag | Default | Description                                        |
+| ---- | ------- | -------------------------------------------------- |
+| `-p` | 8080    | Port to listen on                                  |
+| `-t` | 5m      | Execution timeout for flow runs                    |
 | `-s` | false   | Show start and end nodes in the flow visualization |
 
 ## Deployment Model
 
 `pfctl` is the engine. You bring your flows.
 
-The design is simple: each flow deploys as its own serverless function. One image per flow, one service per flow. Each service auto-scales independently, including scaling to zero when there's no traffic.
+The design is simple: each flow deploys as its own serverless function. One Docker image per flow, one [service](https://www.serverless.com/framework/docs/providers/aws/guide/intro#services) per flow. Each service auto-scales independently, including scaling to zero when there's no traffic (if configured that way).
 
 ```
 Your repo                    Build                     Deploy
@@ -171,7 +171,7 @@ Your repo                    Build                     Deploy
 | flows/                |    |                    |    |                         |
 |   classify.flow.yaml -+--->| Docker image A     +--->| Serverless service A    |
 |   summarize.flow.yaml +--->| Docker image B     +--->| Serverless service B    |
-| Dockerfile            |    |                    |    | (Cloud Run, Azure, etc.)|
+| Dockerfile            |    |                    |    |                         |
 | terraform/            |    +--------------------+    +-------------------------+
 +-----------------------+
 ```
@@ -332,13 +332,13 @@ A router node takes a single input, evaluates it against a list of conditions, a
 
 The `when` field supports these expressions:
 
-| Expression | Description |
-| ---------- | ----------- |
-| `== "value"` | Exact match |
-| `!= "value"` | Not equal |
-| `contains "value"` | Substring match |
-| `startsWith "value"` | Prefix match |
-| `endsWith "value"` | Suffix match |
+| Expression           | Description     |
+| -------------------- | --------------- |
+| `== "value"`         | Exact match     |
+| `!= "value"`         | Not equal       |
+| `contains "value"`   | Substring match |
+| `startsWith "value"` | Prefix match    |
+| `endsWith "value"`   | Suffix match    |
 
 Every router should have a `default: true` route as a fallback. See `examples/flows/routed-support-ticket.flow.yaml` for a complete working example.
 
