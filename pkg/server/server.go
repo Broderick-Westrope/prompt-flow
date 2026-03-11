@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/broderick/prompt-flow/pkg/executor"
@@ -18,31 +22,44 @@ import (
 //go:embed static/dist/*
 var staticFiles embed.FS
 
-// Server represents the web server
 type Server struct {
 	port             int
 	flowPath         string
 	showStartEndNode bool
+	executionTimeout time.Duration
 	registry         *providers.Registry
 	executor         *executor.Executor
+	logger           *slog.Logger
 }
 
-// New creates a new server instance
-func New(port int, flowPath string, showStartEndNode bool) *Server {
+func New(port int, flowPath string, showStartEndNode bool, executionTimeout time.Duration) *Server {
 	registry := providers.NewRegistry().WithDefaultProviders()
+
+	var handler slog.Handler
+	if os.Getenv("LOG_FORMAT") == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, nil)
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, nil)
+	}
+	logger := slog.New(handler)
 
 	return &Server{
 		port:             port,
 		flowPath:         flowPath,
 		showStartEndNode: showStartEndNode,
+		executionTimeout: executionTimeout,
 		registry:         registry,
 		executor:         executor.New(registry),
+		logger:           logger,
 	}
 }
 
-// Start starts the HTTP server
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
+
+	// Health check endpoints
+	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/readyz", s.handleReadyz)
 
 	// API endpoints
 	mux.HandleFunc("/api/flow", s.handleGetFlow)
@@ -58,17 +75,71 @@ func (s *Server) Start() error {
 	}
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 
-	server := &http.Server{
+	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
-		Handler:      mux,
+		Handler:      s.requestLoggingMiddleware(mux),
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: s.executionTimeout + 30*time.Second,
 	}
 
-	return server.ListenAndServe()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		s.logger.Info("server starting", "port", s.port, "flow", s.flowPath)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		s.logger.Info("shutdown signal received, draining connections")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("server shutdown failed: %w", err)
+		}
+		s.logger.Info("server stopped")
+		return nil
+	}
 }
 
-// handleGetFlow returns the flow definition
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.statusCode = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (s *Server) requestLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		s.logger.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.statusCode,
+			"duration", time.Since(start),
+		)
+	})
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleReadyz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -79,7 +150,6 @@ func (s *Server) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if r.Method == http.MethodPost {
-		// Parse flow from request body
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read request: %v", err), http.StatusBadRequest)
@@ -93,7 +163,6 @@ func (s *Server) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Load flow from file
 		if s.flowPath == "" {
 			http.Error(w, "No flow file specified", http.StatusBadRequest)
 			return
@@ -110,7 +179,6 @@ func (s *Server) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(f)
 }
 
-// handleValidateFlow validates a flow definition
 func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -151,7 +219,6 @@ func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleExecuteFlow executes a flow with provided inputs
 func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -174,14 +241,13 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), s.executionTimeout)
 	defer cancel()
 
 	result, err := s.executor.Execute(ctx, f, req.Inputs)
 	if err != nil {
-		// Still return the result even if there's an error
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK) // Use 200 since we're returning structured error info
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(result)
 		return
 	}
@@ -190,7 +256,6 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-// handleGetProviders returns available providers
 func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -204,7 +269,6 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGetConfig returns server configuration
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
