@@ -1,0 +1,69 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+
+# Required GitHub Secrets:
+#   GCP_PROJECT_ID              - Google Cloud project ID
+#   GCP_WORKLOAD_IDENTITY_PROVIDER - Workload Identity Federation provider
+#                                    (e.g., projects/123/locations/global/workloadIdentityPools/pool/providers/provider)
+#   GCP_SERVICE_ACCOUNT         - Service account email for deployments
+#                                    (e.g., deployer@project.iam.gserviceaccount.com)
+
+env:
+  REGION: australia-southeast1
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }} .
+          docker tag ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }} ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:latest
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy pfctl \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --port 8080 \
+            --allow-unauthenticated=false
