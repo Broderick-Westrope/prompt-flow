@@ -1,0 +1,10 @@
+# Example: Build a flow image using pfctl
+FROM golang:1.25-alpine AS build
+RUN go install github.com/broderick/prompt-flow/cmd/pfctl@latest
+
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /go/bin/pfctl /pfctl
+COPY flows/my-flow.flow.yaml /flow.yaml
+EXPOSE 8080
+ENTRYPOINT ["/pfctl"]
+CMD ["serve", "-p", "8080", "/flow.yaml"]
