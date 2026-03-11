@@ -1,0 +1,26 @@
+# Requires: GCP_PROJECT_ID env var and Application Default Credentials (ADC).
+# Setup: export GCP_PROJECT_ID="your-project" && gcloud auth application-default login
+# Optional: export GCP_LOCATION="us-central1" (default)
+version: "1.0"
+name: "simple-vertex-ai-chat"
+description: "A simple chat flow using Google Vertex AI (Gemini). Requires GCP_PROJECT_ID and ADC."
+
+config:
+  default_provider: "vertex_ai"
+  default_model: "gemini-2.0-flash"
+
+nodes:
+  - id: "chat"
+    type: "llm"
+    inputs:
+      - name: "user_input"
+        from: "input"
+    prompt: |
+      You are a helpful assistant.
+
+      User: {{.user_input}}
+
+      Assistant: Please provide a helpful and concise response.
+    outputs:
+      - name: "response"
+        to: "output"
