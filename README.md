@@ -27,14 +27,17 @@ This repo contains an open-source implementation of prompt flows. It is built wi
 - **Vendor Agnostic**: Define flows in YAML or JSON, not tied to any cloud provider
 - **Version Control**: Store flow definitions alongside your code using your tool of choice (eg. Git)
 - **Visual DAG Editor**: Web UI for visualizing and testing flows as a graph
-- **Multi-Provider Support**: Built-in support for OpenAI, Anthropic, and GitHub Playground, with extensible provider interface and PRs welcome
+- **Multi-Provider Support**: Built-in support for OpenAI, Anthropic, Google Vertex AI (Gemini), and GitHub Playground, with extensible provider interface and PRs welcome
+- **Router Nodes**: Conditional branching based on LLM output, so your flow can take different paths depending on results
+- **Parallel Execution**: Independent nodes run concurrently, so flows with multiple branches execute faster
 - **Local Development**: Run and test flows entirely on your local machine
+- **Docker Support**: Ship as a single container with `docker-compose up`
 - **Cost Tracking**: Automatic token usage and cost estimation for each execution
 - **Test Mode**: Execute flows with sample inputs and inspect node-by-node results
 
 ## Installation
 
-## Go Install
+### Go install
 
 If you have Go installed you may install the tool as follows:
 
@@ -44,7 +47,7 @@ go install github.com/broderick/prompt-flow/cmd/pfctl
 
 Follow [these steps](https://go.dev/doc/install) to install Go if you would like to use it.
 
-## Build Locally
+### Build locally
 
 Clone the repository:
 
@@ -69,6 +72,26 @@ go build -o pfctl ./cmd/pfctl
 ```
 
 Either way you will get a `pfctl` file that can be run with `./pfctl`.
+
+### Docker
+
+If you'd rather not install Go or Node.js, you can run `pfctl` as a container:
+
+```bash
+docker-compose up
+```
+
+This builds the image, mounts the `examples/` directory, and starts the web UI on port 8080. To use your own flow files, edit the `command` in `docker-compose.yml` or mount a different directory.
+
+You can also build and run the Docker image directly:
+
+```bash
+# Build
+docker build -t pfctl .
+
+# Run (pass API keys via .env file or -e flags)
+docker run -p 8080:8080 --env-file .env -v ./my-flows:/flows:ro pfctl serve -p 8080 /flows/my-flow.flow.yaml
+```
 
 ## Quick Start
 
@@ -98,6 +121,7 @@ This table shows what environment variable to use for each provider:
 | ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | openai                   | OPENAI_API_KEY        | [API Key](https://platform.openai.com/api-keys)                                                                                                                                                                                                                                  |
 | anthropic                | ANTHROPIC_API_KEY     | [API Key](https://console.anthropic.com/settings/keys)                                                                                                                                                                                                                           |
+| vertex_ai                | GCP_PROJECT_ID        | GCP Project ID (also requires [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials): run `gcloud auth application-default login`). Optionally set `GCP_LOCATION` (defaults to `us-central1`). |
 | github_playground_openai | GITHUB_PLAYGROUND_PAT | [Personal Access Token](https://github.com/settings/personal-access-tokens/new?description=Used+to+call+GitHub+Models+APIs+to+easily+run+LLMs%3A+https%3A%2F%2Fdocs.github.com%2Fgithub-models%2Fquickstart%23step-2-make-an-api-call&name=GitHub+Models+token&user_models=read) |
 
 > 💡 **TIP:**\
@@ -123,10 +147,16 @@ The `test` subcommand was good for a simple flow, but as you add nodes and have 
 You can start the server using this command:
 
 ```bash
-pfctl serve -f my-first-flow.flow.yaml
+pfctl serve my-first-flow.flow.yaml
 ```
 
 This will start the server. Be sure to let it run. Open http://localhost:8080 to visualize and test your flow in the browser. The GIF at the top of this document is a demo of the UI.
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-p` | 8080    | Port to listen on |
+| `-t` | 5m      | Execution timeout for flow runs |
+| `-s` | false   | Show start and end nodes in the flow visualization |
 
 ## Flow Definition Format
 
@@ -138,7 +168,7 @@ Flows are defined in YAML or JSON with the following structure:
 - `name` (string): Flow name
 - `description` (string): Optional description
 - `config` (object): Flow-level configuration
-  - `default_provider` (string): Default LLM provider ("openai", "anthropic")
+  - `default_provider` (string): Default LLM provider (e.g. "openai", "anthropic", "vertex_ai", "github_playground_openai")
   - `default_model` (string): Default model name
 - `nodes` (array): List of nodes in the flow
 
@@ -148,7 +178,7 @@ Each node represents a step in the flow:
 
 ```yaml
 - id: "node_id" # Unique identifier
-  type: "llm" # Node type (currently only "llm" supported)
+  type: "llm" # Node type: "llm" or "router"
   provider: "openai" # Optional: override default provider
   model: "gpt-4" # Optional: override default model
   inputs: # Input sources
@@ -230,7 +260,46 @@ nodes:
         to: "output"
 ```
 
-## Extending with Custom Providers
+### Parallel execution
+
+Nodes that don't depend on each other run concurrently. In the support ticket example above, `classify_urgency` and `classify_department` both take `ticket_text` from the flow input and don't reference each other, so they execute at the same time. `draft_response` waits for both to finish before it runs.
+
+You don't need to configure this. The executor analyzes the dependency graph and groups nodes into levels automatically.
+
+### Router nodes
+
+Router nodes let you branch a flow based on the output of a previous node. Instead of sending every ticket through the same path, you can route it to a specialized handler.
+
+A router node takes a single input, evaluates it against a list of conditions, and sends execution down the matching path. Unmatched paths (and their downstream nodes) are skipped.
+
+```yaml
+- id: route_department
+  type: router
+  inputs:
+    - name: category
+      from: classifier.category
+  routes:
+    - when: '== "billing"'
+      next: handle_billing
+    - when: '== "technical"'
+      next: handle_technical
+    - default: true
+      next: handle_general
+```
+
+The `when` field supports these expressions:
+
+| Expression | Description |
+| ---------- | ----------- |
+| `== "value"` | Exact match |
+| `!= "value"` | Not equal |
+| `contains "value"` | Substring match |
+| `startsWith "value"` | Prefix match |
+| `endsWith "value"` | Suffix match |
+
+Every router should have a `default: true` route as a fallback. See `examples/flows/routed-support-ticket.flow.yaml` for a complete working example.
+
+## Extending with custom providers
 
 To add support for a new LLM provider:
 
