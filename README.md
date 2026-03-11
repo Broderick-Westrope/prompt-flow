@@ -169,9 +169,9 @@ The design is simple: each flow deploys as its own serverless function. One imag
 Your repo                    Build                     Deploy
 +-----------------------+    +--------------------+    +-------------------------+
 | flows/                |    |                    |    |                         |
-|   classify.flow.yaml -+--->| Docker image A     +--->| Cloud Run service A     |
-|   summarize.flow.yaml +--->| Docker image B     +--->| Cloud Run service B     |
-| Dockerfile            |    |                    |    | (or Azure Container App)|
+|   classify.flow.yaml -+--->| Docker image A     +--->| Serverless service A    |
+|   summarize.flow.yaml +--->| Docker image B     +--->| Serverless service B    |
+| Dockerfile            |    |                    |    | (Cloud Run, Azure, etc.)|
 | terraform/            |    +--------------------+    +-------------------------+
 +-----------------------+
 ```

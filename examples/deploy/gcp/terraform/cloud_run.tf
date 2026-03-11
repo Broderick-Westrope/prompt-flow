@@ -12,7 +12,7 @@ resource "google_cloud_run_v2_service" "main" {
 
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}/${var.service_name}:${var.image_tag}"
-      args  = ["serve", "-p", "8080", "--timeout", var.execution_timeout]
+      args  = ["serve", "-p", "8080", "--timeout", var.execution_timeout, var.flow_path]
 
       resources {
         limits = {

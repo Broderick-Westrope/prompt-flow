@@ -1,4 +1,6 @@
 # Example: Build a flow image using pfctl
+# NOTE: Replace the go install path with your fork or a specific version if the
+# module is not yet published to a Go module proxy.
 FROM golang:1.25-alpine AS build
 RUN go install github.com/broderick/prompt-flow/cmd/pfctl@latest
 

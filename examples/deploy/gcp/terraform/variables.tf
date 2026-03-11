@@ -71,6 +71,12 @@ variable "anthropic_api_key" {
   default     = ""
 }
 
+variable "flow_path" {
+  description = "Path to the flow file inside the container"
+  type        = string
+  default     = "/flow.yaml"
+}
+
 variable "allow_unauthenticated" {
   description = "Allow unauthenticated access to the Cloud Run service"
   type        = bool

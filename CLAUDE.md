@@ -53,8 +53,8 @@ go test -v ./...
 
 # Common commands
 ./pfctl init my-flow
-./pfctl validate examples/simple.flow.yaml
-./pfctl test examples/simple.flow.yaml -i user_input="test input"
+./pfctl validate examples/flows/simple.flow.yaml
+./pfctl test examples/flows/simple.flow.yaml -i user_input="test input"
 ./pfctl serve -p 8080 examples/flows/simple.flow.yaml
 ```
 
