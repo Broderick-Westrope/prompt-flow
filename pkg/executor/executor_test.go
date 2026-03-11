@@ -3,7 +3,9 @@ package executor
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/broderick/prompt-flow/pkg/flow"
@@ -14,6 +16,7 @@ import (
 type mockProvider struct {
 	name      string
 	responses map[string]string             // prompt content -> response content
+	mu        sync.Mutex
 	calls     []providers.CompletionRequest // recorded calls for assertions
 	defaultR  string                        // fallback response if no match
 	err       error                         // if set, Complete returns this error
@@ -30,7 +33,9 @@ func newMockProvider(name string) *mockProvider {
 func (m *mockProvider) Name() string { return m.name }
 
 func (m *mockProvider) Complete(_ context.Context, req providers.CompletionRequest) (*providers.CompletionResponse, error) {
+	m.mu.Lock()
 	m.calls = append(m.calls, req)
+	m.mu.Unlock()
 
 	if m.err != nil {
 		return nil, m.err
@@ -876,4 +881,374 @@ func TestExecute_RouterTransitiveSkipping(t *testing.T) {
 	if len(mock.calls) != 2 {
 		t.Errorf("expected 2 provider calls, got %d", len(mock.calls))
 	}
+}
+
+// --- Parallel execution tests ---
+
+func TestExecute_ParallelIndependentNodes(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Process A: hello"] = "result A"
+	mock.responses["Process B: hello"] = "result B"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "nodeA",
+			Prompt:  "Process A: {{.x}}",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "nodeB",
+			Prompt:  "Process B: {{.x}}",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"x": "hello"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got error: %s", result.Error)
+	}
+
+	// Both nodes should have executed
+	if len(result.NodeResults) != 2 {
+		t.Fatalf("expected 2 node results, got %d", len(result.NodeResults))
+	}
+
+	aResult := findNodeResult(result, "nodeA")
+	bResult := findNodeResult(result, "nodeB")
+	if aResult == nil || bResult == nil {
+		t.Fatal("expected both nodeA and nodeB results")
+	}
+	if !aResult.Success || !bResult.Success {
+		t.Error("expected both nodes to succeed")
+	}
+
+	mock.mu.Lock()
+	callCount := len(mock.calls)
+	mock.mu.Unlock()
+	if callCount != 2 {
+		t.Errorf("expected 2 provider calls, got %d", callCount)
+	}
+}
+
+func TestExecute_ParallelDiamondPattern(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Start: val"] = "from A"
+	mock.responses["B: from A"] = "from B"
+	mock.responses["C: from A"] = "from C"
+	mock.responses["D: from B from C"] = "from D"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "A",
+			Prompt:  "Start: {{.x}}",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:      "B",
+			Prompt:  "B: {{.a_out}}",
+			Inputs:  []flow.Input{{Name: "a_out", From: "A.result"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:      "C",
+			Prompt:  "C: {{.a_out}}",
+			Inputs:  []flow.Input{{Name: "a_out", From: "A.result"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:     "D",
+			Prompt: "D: {{.b_out}} {{.c_out}}",
+			Inputs: []flow.Input{
+				{Name: "b_out", From: "B.result"},
+				{Name: "c_out", From: "C.result"},
+			},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"x": "val"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got error: %s", result.Error)
+	}
+
+	if len(result.NodeResults) != 4 {
+		t.Fatalf("expected 4 node results, got %d", len(result.NodeResults))
+	}
+
+	dResult := findNodeResult(result, "D")
+	if dResult == nil {
+		t.Fatal("expected D node result")
+	}
+	if dResult.Outputs["result"] != "from D" {
+		t.Errorf("expected D output 'from D', got %q", dResult.Outputs["result"])
+	}
+
+	if result.Outputs["result"] != "from D" {
+		t.Errorf("expected flow output 'from D', got %q", result.Outputs["result"])
+	}
+}
+
+func TestExecute_ParallelErrorCancelsLevel(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.err = fmt.Errorf("provider failure")
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "nodeA",
+			Prompt:  "Process A: {{.x}}",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "nodeB",
+			Prompt:  "Process B: {{.x}}",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"x": "val"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "provider failure") {
+		t.Errorf("expected error containing 'provider failure', got %q", err.Error())
+	}
+	if result != nil && result.Success {
+		t.Error("expected Success=false")
+	}
+}
+
+func TestExecute_ParallelRouterSkipping(t *testing.T) {
+	mock := newMockProvider("mock")
+	mock.responses["Classify: test"] = "billing"
+	mock.responses["Handle billing: billing"] = "billing handled"
+	registry := providers.NewRegistry()
+	registry.Register(mock)
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify: {{.user_input}}",
+			Inputs:  []flow.Input{{Name: "user_input", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "billing"`, Next: "handle_billing"},
+				{Default: true, Next: "handle_other"},
+			},
+		},
+		{
+			ID:      "handle_billing",
+			Type:    "llm",
+			Prompt:  "Handle billing: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_other",
+			Type:    "llm",
+			Prompt:  "Handle other: {{.cat}}",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	result, err := exec.Execute(context.Background(), f, map[string]any{"user_input": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got error: %s", result.Error)
+	}
+
+	// handle_billing should have executed
+	billingResult := findNodeResult(result, "handle_billing")
+	if billingResult == nil {
+		t.Fatal("expected handle_billing node result")
+	}
+	if billingResult.Skipped {
+		t.Error("expected handle_billing to NOT be skipped")
+	}
+
+	// handle_other should be skipped
+	otherResult := findNodeResult(result, "handle_other")
+	if otherResult == nil {
+		t.Fatal("expected handle_other node result")
+	}
+	if !otherResult.Skipped {
+		t.Error("expected handle_other to be skipped")
+	}
+
+	// Only classifier + handle_billing should have made LLM calls
+	mock.mu.Lock()
+	callCount := len(mock.calls)
+	mock.mu.Unlock()
+	if callCount != 2 {
+		t.Errorf("expected 2 provider calls (classifier + handle_billing), got %d", callCount)
+	}
+}
+
+// --- executionLevels unit tests ---
+
+func TestExecutionLevels_Basic(t *testing.T) {
+	registry := providers.NewRegistry()
+	exec := New(registry)
+
+	// A → B, A → C, B → D, C → D
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "A",
+			Prompt:  "A",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:      "B",
+			Prompt:  "B",
+			Inputs:  []flow.Input{{Name: "a", From: "A.result"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:      "C",
+			Prompt:  "C",
+			Inputs:  []flow.Input{{Name: "a", From: "A.result"}},
+			Outputs: []flow.Output{{Name: "result", To: ""}},
+		},
+		{
+			ID:     "D",
+			Prompt: "D",
+			Inputs: []flow.Input{
+				{Name: "b", From: "B.result"},
+				{Name: "c", From: "C.result"},
+			},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	levels, err := exec.executionLevels(f)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(levels) != 3 {
+		t.Fatalf("expected 3 levels, got %d", len(levels))
+	}
+
+	// Level 0: [A]
+	level0IDs := levelNodeIDs(levels[0])
+	if len(level0IDs) != 1 || level0IDs[0] != "A" {
+		t.Errorf("expected level 0 = [A], got %v", level0IDs)
+	}
+
+	// Level 1: [B, C] (order may vary)
+	level1IDs := levelNodeIDs(levels[1])
+	sort.Strings(level1IDs)
+	if len(level1IDs) != 2 || level1IDs[0] != "B" || level1IDs[1] != "C" {
+		t.Errorf("expected level 1 = [B, C], got %v", level1IDs)
+	}
+
+	// Level 2: [D]
+	level2IDs := levelNodeIDs(levels[2])
+	if len(level2IDs) != 1 || level2IDs[0] != "D" {
+		t.Errorf("expected level 2 = [D], got %v", level2IDs)
+	}
+}
+
+func TestExecutionLevels_WithRouter(t *testing.T) {
+	registry := providers.NewRegistry()
+	exec := New(registry)
+
+	f := baseFlow([]flow.Node{
+		{
+			ID:      "classifier",
+			Type:    "llm",
+			Prompt:  "Classify",
+			Inputs:  []flow.Input{{Name: "x", From: "input"}},
+			Outputs: []flow.Output{{Name: "category", To: ""}},
+		},
+		{
+			ID:   "router",
+			Type: "router",
+			Inputs: []flow.Input{{Name: "category", From: "classifier.category"}},
+			Routes: []flow.Route{
+				{When: `== "a"`, Next: "handle_a"},
+				{Default: true, Next: "handle_b"},
+			},
+		},
+		{
+			ID:      "handle_a",
+			Type:    "llm",
+			Prompt:  "Handle A",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+		{
+			ID:      "handle_b",
+			Type:    "llm",
+			Prompt:  "Handle B",
+			Inputs:  []flow.Input{{Name: "cat", From: "classifier.category"}},
+			Outputs: []flow.Output{{Name: "result", To: "output"}},
+		},
+	})
+
+	levels, err := exec.executionLevels(f)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(levels) != 3 {
+		t.Fatalf("expected 3 levels, got %d", len(levels))
+	}
+
+	// Level 0: [classifier]
+	level0IDs := levelNodeIDs(levels[0])
+	if len(level0IDs) != 1 || level0IDs[0] != "classifier" {
+		t.Errorf("expected level 0 = [classifier], got %v", level0IDs)
+	}
+
+	// Level 1: [router]
+	level1IDs := levelNodeIDs(levels[1])
+	if len(level1IDs) != 1 || level1IDs[0] != "router" {
+		t.Errorf("expected level 1 = [router], got %v", level1IDs)
+	}
+
+	// Level 2: [handle_a, handle_b] (order may vary)
+	level2IDs := levelNodeIDs(levels[2])
+	sort.Strings(level2IDs)
+	if len(level2IDs) != 2 || level2IDs[0] != "handle_a" || level2IDs[1] != "handle_b" {
+		t.Errorf("expected level 2 = [handle_a, handle_b], got %v", level2IDs)
+	}
+}
+
+func levelNodeIDs(nodes []*flow.Node) []string {
+	ids := make([]string, len(nodes))
+	for i, n := range nodes {
+		ids[i] = n.ID
+	}
+	return ids
 }
