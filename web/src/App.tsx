@@ -52,7 +52,6 @@ function App() {
 
     try {
       const result = await api.executeFlow({
-        flow,
         inputs,
       });
       setExecutionResult(result);

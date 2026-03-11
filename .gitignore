@@ -35,6 +35,8 @@ Thumbs.db
 *.flow.json
 !examples/**/*.flow.yaml
 !examples/**/*.flow.json
+!pkg/server/testdata/**/*.flow.yaml
+!pkg/server/testdata/**/*.flow.json
 
 !CLAUDE.md
 

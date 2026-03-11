@@ -25,12 +25,18 @@ var staticFiles embed.FS
 
 const maxRequestBodySize = 1 << 20 // 1MB
 
+const (
+	ModeDev  = "dev"
+	ModeProd = "prod"
+)
+
 type Config struct {
 	Port             int
 	FlowPath         string
 	ShowStartEndNode bool
 	ExecutionTimeout time.Duration
 	Logger           *slog.Logger
+	Mode             string // ModeDev or ModeProd; defaults to ModeDev
 }
 
 type Server struct {
@@ -41,9 +47,28 @@ type Server struct {
 	registry         *providers.Registry
 	executor         *executor.Executor
 	logger           *slog.Logger
+	mode             string
+	flow             *flow.Flow
 }
 
-func New(cfg Config) *Server {
+func New(cfg Config) (*Server, error) {
+	if cfg.FlowPath == "" {
+		return nil, fmt.Errorf("flow path is required")
+	}
+
+	mode := cfg.Mode
+	if mode == "" {
+		mode = ModeDev
+	}
+	if mode != ModeDev && mode != ModeProd {
+		return nil, fmt.Errorf("invalid mode %q: must be %q or %q", mode, ModeDev, ModeProd)
+	}
+
+	f, err := flow.Parse(cfg.FlowPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse flow file: %w", err)
+	}
+
 	registry := providers.NewRegistry().WithDefaultProviders()
 
 	executionTimeout := cfg.ExecutionTimeout
@@ -70,27 +95,34 @@ func New(cfg Config) *Server {
 		registry:         registry,
 		executor:         executor.New(registry),
 		logger:           logger,
-	}
+		mode:             mode,
+		flow:             f,
+	}, nil
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) error {
-	// Health check endpoints
+	// Health check endpoints (always registered)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 
-	// API endpoints
-	mux.HandleFunc("/api/flow", s.handleGetFlow)
-	mux.HandleFunc("/api/flow/validate", s.handleValidateFlow)
-	mux.HandleFunc("/api/flow/execute", s.handleExecuteFlow)
-	mux.HandleFunc("/api/providers", s.handleGetProviders)
-	mux.HandleFunc("/api/config", s.handleGetConfig)
+	// Execution endpoint (always registered)
+	mux.HandleFunc("POST /api/flow/execute", s.handleExecuteFlow)
 
-	// Serve static files
-	staticFS, err := fs.Sub(staticFiles, "static/dist")
-	if err != nil {
-		return fmt.Errorf("failed to get static file system: %w", err)
+	// Dev-only endpoints
+	if s.mode == ModeDev {
+		mux.HandleFunc("GET /api/flow", s.handleGetFlow)
+		mux.HandleFunc("POST /api/flow/validate", s.handleValidateFlow)
+		mux.HandleFunc("GET /api/providers", s.handleGetProviders)
+		mux.HandleFunc("GET /api/config", s.handleGetConfig)
+
+		// Serve static files
+		staticFS, err := fs.Sub(staticFiles, "static/dist")
+		if err != nil {
+			return fmt.Errorf("failed to get static file system: %w", err)
+		}
+		mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	}
-	mux.Handle("/", http.FileServer(http.FS(staticFS)))
+
 	return nil
 }
 
@@ -121,7 +153,7 @@ func (s *Server) Start() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		s.logger.Info("server starting", "port", s.port, "flow", s.flowPath)
+		s.logger.Info("server starting", "port", s.port, "flow", s.flowPath, "mode", s.mode)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -174,55 +206,20 @@ func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if s.flow == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"status": "unavailable"})
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleGetFlow(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var f *flow.Flow
-	var err error
-
-	if r.Method == http.MethodPost {
-		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to read request: %v", err), http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-
-		f, err = flow.ParseBytes(body, "flow.yaml")
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to parse flow: %v", err), http.StatusBadRequest)
-			return
-		}
-	} else {
-		if s.flowPath == "" {
-			http.Error(w, "No flow file specified", http.StatusBadRequest)
-			return
-		}
-
-		f, err = flow.Parse(s.flowPath)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to load flow: %v", err), http.StatusInternalServerError)
-			return
-		}
-	}
-
+func (s *Server) handleGetFlow(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(f)
+	json.NewEncoder(w).Encode(s.flow)
 }
 
 func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -259,33 +256,31 @@ func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 
-	var req struct {
-		Flow   json.RawMessage `json:"flow"`
-		Inputs map[string]any  `json:"inputs"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to parse request: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	f, err := flow.ParseBytes(req.Flow, "flow.yaml")
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to parse flow: %v", err), http.StatusBadRequest)
+	if _, hasFlow := raw["flow"]; hasFlow {
+		http.Error(w, `The 'flow' field is no longer accepted; the server executes its loaded flow file. Send only {"inputs": {...}}`, http.StatusBadRequest)
 		return
+	}
+
+	var inputs map[string]any
+	if rawInputs, ok := raw["inputs"]; ok {
+		if err := json.Unmarshal(rawInputs, &inputs); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to parse inputs: %v", err), http.StatusBadRequest)
+			return
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), s.executionTimeout)
 	defer cancel()
 
-	result, err := s.executor.Execute(ctx, f, req.Inputs)
+	result, err := s.executor.Execute(ctx, s.flow, inputs)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -297,12 +292,7 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func (s *Server) handleGetProviders(w http.ResponseWriter, _ *http.Request) {
 	providers := s.registry.List()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -310,12 +300,7 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"showStartEndNode": s.showStartEndNode,
