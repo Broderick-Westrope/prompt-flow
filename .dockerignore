@@ -1,0 +1,13 @@
+.git/
+node_modules/
+web/node_modules/
+.env
+.env.local
+pfctl
+plans/
+.claude/
+*.test
+*.out
+.DS_Store
+.vscode/
+.idea/

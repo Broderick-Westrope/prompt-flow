@@ -9,3 +9,12 @@ tasks:
     deps:
       - build.web
     cmd: "go build -o pfctl ./cmd/pfctl"
+
+  docker.build:
+    desc: Build Docker image
+    cmd: docker build -t pfctl .
+
+  docker.run:
+    desc: Run container locally
+    deps: [docker.build]
+    cmd: docker run -p 8080:8080 --env-file .env pfctl serve -p 8080 -f /examples/flows/simple.flow.yaml

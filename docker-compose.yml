@@ -1,0 +1,14 @@
+services:
+  pfctl:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - GITHUB_PLAYGROUND_PAT
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+      - GCP_PROJECT_ID
+      - GCP_LOCATION
+    volumes:
+      - ./examples:/examples:ro
+    command: ["serve", "-p", "8080", "-f", "/examples/flows/simple.flow.yaml"]
