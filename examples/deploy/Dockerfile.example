@@ -2,4 +2,4 @@
 # Pin to a specific version for reproducible builds: ghcr.io/broderick-westrope/prompt-flow:1.0.0
 FROM ghcr.io/broderick-westrope/prompt-flow:latest
 COPY my-flow.flow.yaml /flow.yaml
-CMD ["serve", "-p", "8080", "/flow.yaml"]
+CMD ["serve", "--mode=prod", "-p", "8080", "/flow.yaml"]
