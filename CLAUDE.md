@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Prompt Flow is a vendor-agnostic CLI tool (`pfctl`) for creating, testing, and visualizing prompt flows locally. It enables building reproducible, version-controlled generative AI workflows using YAML/JSON flow definitions that orchestrate LLM interactions in a directed acyclic graph (DAG).
+Prompt Flow is a vendor-agnostic engine (`pfctl`) for running LLM prompt flows. It serves as both a local development tool for creating, testing, and visualizing flows, and a production engine for deploying flows as serverless functions. Flows are defined in YAML/JSON and orchestrate LLM interactions in a directed acyclic graph (DAG).
+
+**Deployment model:** Each flow deploys as its own serverless function (one image per flow, one service per flow). Reference deployment configs live in `examples/deploy/`. See `examples/deploy/README.md` for details.
 
 ## Build and Development Commands
 
@@ -53,7 +55,7 @@ go test -v ./...
 ./pfctl init my-flow
 ./pfctl validate examples/simple.flow.yaml
 ./pfctl test examples/simple.flow.yaml -i user_input="test input"
-./pfctl serve -p 8080 -f examples/simple.flow.yaml
+./pfctl serve -p 8080 examples/flows/simple.flow.yaml
 ```
 
 ### Environment Setup
@@ -80,7 +82,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 
 - `executor.go`: DAG execution engine that:
   - Performs topological sort using Kahn's algorithm to determine node execution order
-  - Executes nodes sequentially based on dependencies
+  - Executes independent nodes in parallel, grouped by dependency level
   - Manages data flow between nodes using a `nodeOutputs` map
   - Renders prompt templates using Go's `text/template` package
   - Tracks metrics (tokens, costs, timing) for each node
@@ -115,7 +117,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 
 1. **Validation**: Flow is validated for cycles, missing references, and schema errors
 2. **Topological Sort**: Nodes are ordered based on dependencies (e.g., if node B depends on node A's output, A executes first)
-3. **Sequential Execution**: Nodes execute in dependency order (not in parallel)
+3. **Parallel Execution**: Independent nodes at the same dependency level execute concurrently
 4. **Data Flow**:
    - Flow inputs come from CLI flags (`-i key=value`)
    - Node outputs are stored in `nodeOutputs[nodeID][outputName]`
@@ -140,7 +142,7 @@ Flows are YAML/JSON files with:
 - `config`: Default provider and model settings
 - `nodes`: Array of processing steps, each with:
   - `id`: Unique identifier
-  - `type`: Currently only "llm" supported
+  - `type`: "llm" for LLM completions, "router" for conditional branching
   - `provider`, `model`: Optional overrides for this node
   - `inputs`: Array of `{name, from}` where `from` is either "input" or "node_id.output_name"
   - `prompt`: Go template string for the LLM prompt
@@ -164,7 +166,5 @@ Flows are YAML/JSON files with:
 ## Known Limitations
 
 - No test coverage exists yet
-- Only "llm" node type is implemented (no HTTP, database, or custom nodes)
-- Node execution is sequential, not parallel
 - Web UI serves embedded static files but doesn't support live editing with auto-save
 - Cost estimation is approximate and doesn't account for cached tokens or batch discounts

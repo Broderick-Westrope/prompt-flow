@@ -1,6 +1,6 @@
 # Prompt Flow
 
-A cloud-agnostic tool for leveraging prompt flows. Build reproducible, version-controlled generative AI workflows without being locked into any cloud provider tools.
+A vendor-agnostic engine for running LLM prompt flows. Designed for both local development and production deployment as serverless functions.
 
 ![A demo of one of the tools used to create prompt flows. It shows a DAG (directed acyclic graph) and a panel for testing it.](./demo.gif "One of the tools for making prompt flows.")
 
@@ -16,11 +16,11 @@ A prompt flow is a structured workflow that coordinates interactions between LLM
 > _"If it's so great then why don't systems do this already instead of just making one model call?"_\
 > ~You
 
-Some systems do. They may include complex code to handle each scenario or leverage existing solutions such as Azure Prompt Flows or AWS Bedrock Flows. The issue with these is that **_they lock you in!!_** You're prompt configurations are stored within their system with no easy way to export them. Additionally, since they are accessed via a web editor and stored in their cloud there is no easy way to version control your prompts.
+Some systems do. They may include complex code to handle each scenario or use existing solutions such as Azure Prompt Flows or AWS Bedrock Flows. The issue with these is that **_they lock you in!!_** Your prompt configurations are stored within their system with no easy way to export them. Additionally, since they are accessed via a web editor and stored in their cloud there is no easy way to version control your prompts.
 
 ### The Solution
 
-This repo contains an open-source implementation of prompt flows. It is built with developers in mind. It lets you store your flow configurations as YAML, making them easily controlled using any version control system (eg. Git). There CLI which contains all the bells and whistles needed for developing prompt flows, including initialising a new flow, testing a flow using real model calls, visualising a flow graph in the browser, etc. All while being vendor-agnostic, allowing you to use whichever cloud provider is right for you.
+This repo contains an open-source implementation of prompt flows. It is built with developers in mind. It lets you store your flow configurations as YAML, making them easily controlled using any version control system (eg. Git). The CLI (`pfctl`) contains all the bells and whistles needed for developing prompt flows, including initializing a new flow, testing a flow using real model calls, visualizing a flow graph in the browser, etc. All while being vendor-agnostic, allowing you to use whichever cloud provider is right for you.
 
 ## Features
 
@@ -30,6 +30,7 @@ This repo contains an open-source implementation of prompt flows. It is built wi
 - **Multi-Provider Support**: Built-in support for OpenAI, Anthropic, Google Vertex AI (Gemini), and GitHub Playground, with extensible provider interface and PRs welcome
 - **Router Nodes**: Conditional branching based on LLM output, so your flow can take different paths depending on results
 - **Parallel Execution**: Independent nodes run concurrently, so flows with multiple branches execute faster
+- **Serverless Deployment**: Deploy each flow as its own auto-scaling serverless function (see [Deployment Model](#deployment-model))
 - **Local Development**: Run and test flows entirely on your local machine
 - **Docker Support**: Ship as a single container with `docker-compose up`
 - **Cost Tracking**: Automatic token usage and cost estimation for each execution
@@ -124,7 +125,7 @@ This table shows what environment variable to use for each provider:
 | vertex_ai                | GCP_PROJECT_ID        | GCP Project ID (also requires [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials): run `gcloud auth application-default login`). Optionally set `GCP_LOCATION` (defaults to `us-central1`). |
 | github_playground_openai | GITHUB_PLAYGROUND_PAT | [Personal Access Token](https://github.com/settings/personal-access-tokens/new?description=Used+to+call+GitHub+Models+APIs+to+easily+run+LLMs%3A+https%3A%2F%2Fdocs.github.com%2Fgithub-models%2Fquickstart%23step-2-make-an-api-call&name=GitHub+Models+token&user_models=read) |
 
-> 💡 **TIP:**\
+> **TIP:**\
 > [GitHub Playground](https://github.com/marketplace/models/azure-openai/gpt-4o-mini/playground) is a great service for developers to test different models without paying.
 
 \
@@ -157,6 +158,48 @@ This will start the server. Be sure to let it run. Open http://localhost:8080 to
 | `-p` | 8080    | Port to listen on |
 | `-t` | 5m      | Execution timeout for flow runs |
 | `-s` | false   | Show start and end nodes in the flow visualization |
+
+## Deployment Model
+
+`pfctl` is the engine. You bring your flows.
+
+The design is simple: each flow deploys as its own serverless function. One image per flow, one service per flow. Each service auto-scales independently, including scaling to zero when there's no traffic.
+
+```
+Your repo                    Build                     Deploy
++-----------------------+    +--------------------+    +-------------------------+
+| flows/                |    |                    |    |                         |
+|   classify.flow.yaml -+--->| Docker image A     +--->| Cloud Run service A     |
+|   summarize.flow.yaml +--->| Docker image B     +--->| Cloud Run service B     |
+| Dockerfile            |    |                    |    | (or Azure Container App)|
+| terraform/            |    +--------------------+    +-------------------------+
++-----------------------+
+```
+
+A typical setup looks like this:
+
+1. Your repo contains flow YAML files, a Dockerfile, and deployment config
+2. The Dockerfile installs `pfctl` and copies in your flow file
+3. CI/CD builds one image per flow and deploys each as a serverless service
+
+See [`examples/deploy/Dockerfile.example`](examples/deploy/Dockerfile.example) for a starting point and [`examples/deploy/README.md`](examples/deploy/README.md) for the full deployment guide.
+
+### Deploying to GCP Cloud Run
+
+The [`examples/deploy/gcp/`](examples/deploy/gcp/) directory contains reference Terraform modules and a GitHub Actions workflow for deploying flows to Cloud Run.
+
+What's included:
+
+- **Terraform module** for Cloud Run, Artifact Registry, Secret Manager, and IAM
+- **GitHub Actions workflow** for building, pushing, and deploying images
+
+Prerequisites: a GCP project, Workload Identity Federation for CI/CD auth, and the `gcloud` CLI.
+
+Each flow gets its own Cloud Run service. The Terraform module creates one service per flow, each backed by its own container image. See the [deploy README](examples/deploy/README.md) for details.
+
+### Deploying to Azure Container Apps
+
+Coming soon. Azure Container Apps follows the same pattern (one container app per flow, scale to zero). The `examples/deploy/azure/` directory will contain Terraform modules and a GitHub Actions workflow when ready.
 
 ## Flow Definition Format
 
