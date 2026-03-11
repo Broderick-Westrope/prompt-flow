@@ -60,7 +60,6 @@ export interface ExecutionResult {
 }
 
 export interface ExecuteFlowRequest {
-  flow: Flow;
   inputs: Record<string, unknown>;
 }
 
