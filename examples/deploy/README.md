@@ -6,7 +6,7 @@ These are **reference implementations** — copy them into your own repository a
 
 Each flow runs as its own serverless container service:
 
-- **One image per flow** — your Dockerfile bundles `pfctl` with your flow definition(s)
+- **One image per flow** — your Dockerfile layers your flow definition(s) on the pfctl base image
 - **One service per flow** — each flow gets its own auto-scalable serverless instance
 - **Scale to zero** — no traffic means no cost (supported on both GCP and Azure)
 
@@ -19,12 +19,12 @@ Use `Dockerfile.example` as a starting point. The key pattern is:
 3. Set CMD to `pfctl serve` with your flow file
 
 ```dockerfile
-FROM ghcr.io/broderick/prompt-flow:latest
+FROM ghcr.io/broderick-westrope/prompt-flow:latest
 COPY my-flow.flow.yaml /flow.yaml
 CMD ["serve", "-p", "8080", "/flow.yaml"]
 ```
 
-Pin to a specific version for reproducible builds (e.g., `ghcr.io/broderick/prompt-flow:1.0.0`).
+Pin to a specific version for reproducible builds (e.g., `ghcr.io/broderick-westrope/prompt-flow:1.0.0`).
 
 See `Dockerfile.example` for the full template.
 

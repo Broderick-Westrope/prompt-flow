@@ -1,5 +1,5 @@
 # Build a flow image using pfctl as the base.
-# Pin to a specific version for reproducible builds: ghcr.io/broderick/prompt-flow:1.0.0
-FROM ghcr.io/broderick/prompt-flow:latest
+# Pin to a specific version for reproducible builds: ghcr.io/broderick-westrope/prompt-flow:1.0.0
+FROM ghcr.io/broderick-westrope/prompt-flow:latest
 COPY my-flow.flow.yaml /flow.yaml
 CMD ["serve", "-p", "8080", "/flow.yaml"]
