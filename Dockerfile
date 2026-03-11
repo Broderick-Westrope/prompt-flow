@@ -12,7 +12,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /app/web/dist/ pkg/server/static/dist/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /pfctl ./cmd/pfctl
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /pfctl ./cmd/pfctl
 
 # Stage 3: Runtime
 FROM gcr.io/distroless/static-debian12

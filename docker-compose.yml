@@ -11,4 +11,4 @@ services:
       - GCP_LOCATION
     volumes:
       - ./examples:/examples:ro
-    command: ["serve", "-p", "8080", "-f", "/examples/flows/simple.flow.yaml"]
+    command: ["serve", "-p", "8080", "/examples/flows/simple.flow.yaml"]

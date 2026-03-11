@@ -11,12 +11,12 @@ import (
 )
 
 func TestHealthzEndpoint(t *testing.T) {
-	srv := newTestServer()
-	mux := srv.testMux(t)
+	srv := newTestServer(t)
+	handler := srv.testHandler(t)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rec.Code)
@@ -32,12 +32,12 @@ func TestHealthzEndpoint(t *testing.T) {
 }
 
 func TestReadyzEndpoint(t *testing.T) {
-	srv := newTestServer()
-	mux := srv.testMux(t)
+	srv := newTestServer(t)
+	handler := srv.testHandler(t)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rec.Code)
@@ -56,15 +56,15 @@ func TestRequestLoggingMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 
-	srv := newTestServer()
+	srv := newTestServer(t)
 	srv.logger = logger
 
-	mux := srv.testMux(t)
-	handler := srv.requestLoggingMiddleware(mux)
+	handler := srv.testHandler(t)
+	loggingHandler := srv.requestLoggingMiddleware(handler)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	handler.ServeHTTP(rec, req)
+	loggingHandler.ServeHTTP(rec, req)
 
 	logOutput := buf.String()
 	for _, want := range []string{"method=GET", "path=/healthz", "status=200"} {
@@ -78,7 +78,7 @@ func TestRequestLoggingMiddlewareRecordsStatusCode(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 
-	srv := newTestServer()
+	srv := newTestServer(t)
 	srv.logger = logger
 
 	notFound := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -96,19 +96,11 @@ func TestRequestLoggingMiddlewareRecordsStatusCode(t *testing.T) {
 	}
 }
 
-func newTestServer() *Server {
-	return New(0, "", false, 5*time.Minute)
-}
-
-func (s *Server) testMux(t *testing.T) *http.ServeMux {
+func newTestServer(t *testing.T) *Server {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", s.handleHealthz)
-	mux.HandleFunc("/readyz", s.handleReadyz)
-	mux.HandleFunc("/api/flow", s.handleGetFlow)
-	mux.HandleFunc("/api/flow/validate", s.handleValidateFlow)
-	mux.HandleFunc("/api/flow/execute", s.handleExecuteFlow)
-	mux.HandleFunc("/api/providers", s.handleGetProviders)
-	mux.HandleFunc("/api/config", s.handleGetConfig)
-	return mux
+	return New(Config{
+		Port:             0,
+		ExecutionTimeout: 5 * time.Minute,
+		Logger:           slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+	})
 }

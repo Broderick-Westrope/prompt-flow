@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -22,6 +23,16 @@ import (
 //go:embed static/dist/*
 var staticFiles embed.FS
 
+const maxRequestBodySize = 1 << 20 // 1MB
+
+type Config struct {
+	Port             int
+	FlowPath         string
+	ShowStartEndNode bool
+	ExecutionTimeout time.Duration
+	Logger           *slog.Logger
+}
+
 type Server struct {
 	port             int
 	flowPath         string
@@ -32,21 +43,29 @@ type Server struct {
 	logger           *slog.Logger
 }
 
-func New(port int, flowPath string, showStartEndNode bool, executionTimeout time.Duration) *Server {
+func New(cfg Config) *Server {
 	registry := providers.NewRegistry().WithDefaultProviders()
 
-	var handler slog.Handler
-	if os.Getenv("LOG_FORMAT") == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, nil)
-	} else {
-		handler = slog.NewTextHandler(os.Stdout, nil)
+	executionTimeout := cfg.ExecutionTimeout
+	if executionTimeout == 0 {
+		executionTimeout = 5 * time.Minute
 	}
-	logger := slog.New(handler)
+
+	logger := cfg.Logger
+	if logger == nil {
+		var handler slog.Handler
+		if os.Getenv("LOG_FORMAT") == "json" {
+			handler = slog.NewJSONHandler(os.Stdout, nil)
+		} else {
+			handler = slog.NewTextHandler(os.Stdout, nil)
+		}
+		logger = slog.New(handler)
+	}
 
 	return &Server{
-		port:             port,
-		flowPath:         flowPath,
-		showStartEndNode: showStartEndNode,
+		port:             cfg.Port,
+		flowPath:         cfg.FlowPath,
+		showStartEndNode: cfg.ShowStartEndNode,
 		executionTimeout: executionTimeout,
 		registry:         registry,
 		executor:         executor.New(registry),
@@ -54,12 +73,10 @@ func New(port int, flowPath string, showStartEndNode bool, executionTimeout time
 	}
 }
 
-func (s *Server) Start() error {
-	mux := http.NewServeMux()
-
+func (s *Server) registerRoutes(mux *http.ServeMux) error {
 	// Health check endpoints
-	mux.HandleFunc("/healthz", s.handleHealthz)
-	mux.HandleFunc("/readyz", s.handleReadyz)
+	mux.HandleFunc("GET /healthz", s.handleHealthz)
+	mux.HandleFunc("GET /readyz", s.handleReadyz)
 
 	// API endpoints
 	mux.HandleFunc("/api/flow", s.handleGetFlow)
@@ -74,6 +91,23 @@ func (s *Server) Start() error {
 		return fmt.Errorf("failed to get static file system: %w", err)
 	}
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
+	return nil
+}
+
+func (s *Server) testHandler(t interface{ Helper(); Fatal(args ...any) }) http.Handler {
+	t.Helper()
+	mux := http.NewServeMux()
+	if err := s.registerRoutes(mux); err != nil {
+		t.Fatal(err)
+	}
+	return mux
+}
+
+func (s *Server) Start() error {
+	mux := http.NewServeMux()
+	if err := s.registerRoutes(mux); err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
@@ -93,6 +127,9 @@ func (s *Server) Start() error {
 
 	select {
 	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return err
 	case <-ctx.Done():
 		s.logger.Info("shutdown signal received, draining connections")
@@ -150,6 +187,7 @@ func (s *Server) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if r.Method == http.MethodPost {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read request: %v", err), http.StatusBadRequest)
@@ -185,6 +223,7 @@ func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to read request: %v", err), http.StatusBadRequest)
@@ -224,6 +263,8 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 
 	var req struct {
 		Flow   json.RawMessage `json:"flow"`

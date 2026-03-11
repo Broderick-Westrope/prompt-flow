@@ -17,4 +17,4 @@ tasks:
   docker.run:
     desc: Run container locally
     deps: [docker.build]
-    cmd: docker run -p 8080:8080 --env-file .env pfctl serve -p 8080 -f /examples/flows/simple.flow.yaml
+    cmd: docker run -p 8080:8080 --env-file .env pfctl serve -p 8080
