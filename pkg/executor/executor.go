@@ -46,6 +46,11 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 		return result, err
 	}
 
+	concurrency := e.MaxConcurrency
+	if concurrency <= 0 {
+		concurrency = 10
+	}
+
 	levels, err := e.executionLevels(f)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to build execution order: %v", err)
@@ -57,16 +62,19 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 	nodeOutputs := make(map[string]map[string]any)
 	skippedNodes := make(map[string]bool)
 
-	var mu sync.Mutex // protects nodeOutputs writes and result.NodeResults appends
+	var mu sync.Mutex // protects result.NodeResults appends
 
 	for _, level := range levels {
-		g, gCtx := errgroup.WithContext(ctx)
-		g.SetLimit(e.MaxConcurrency)
+		// Resolve input data for all nodes on the main goroutine before
+		// launching workers. This avoids concurrent reads of nodeOutputs
+		// (which is only written to between levels, never during).
+		type nodeWork struct {
+			node      *flow.Node
+			inputData map[string]any
+		}
+		var work []nodeWork
 
 		for _, node := range level {
-			node := node // capture loop variable
-
-			// Check if this node should be skipped
 			if skippedNodes[node.ID] {
 				nodeResult := &flow.NodeResult{
 					NodeID:    node.ID,
@@ -76,30 +84,48 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 					StartTime: time.Now(),
 					EndTime:   time.Now(),
 				}
-				mu.Lock()
 				result.NodeResults = append(result.NodeResults, *nodeResult)
 				nodeOutputs[node.ID] = nodeResult.Outputs
-				mu.Unlock()
 				continue
 			}
 
+			inputData, err := resolveInputData(node, inputs, nodeOutputs)
+			if err != nil {
+				result.Error = fmt.Sprintf("node %s failed: %v", node.ID, err)
+				result.EndTime = time.Now()
+				result.Duration = time.Since(startTime)
+				return result, err
+			}
+			work = append(work, nodeWork{node: node, inputData: inputData})
+		}
+
+		if len(work) == 0 {
+			continue
+		}
+
+		g, gCtx := errgroup.WithContext(ctx)
+		g.SetLimit(concurrency)
+
+		for _, w := range work {
 			g.Go(func() error {
-				nodeResult, err := e.executeNode(gCtx, f, node, inputs, nodeOutputs)
+				nodeResult, err := e.executeNode(gCtx, f, w.node, w.inputData)
 
 				mu.Lock()
 				result.NodeResults = append(result.NodeResults, *nodeResult)
 				if err == nil {
-					nodeOutputs[node.ID] = nodeResult.Outputs
+					nodeOutputs[w.node.ID] = nodeResult.Outputs
 				}
 				mu.Unlock()
 
 				if err != nil {
-					return fmt.Errorf("node %s failed: %v", node.ID, err)
+					return fmt.Errorf("node %s failed: %v", w.node.ID, err)
 				}
 				return nil
 			})
 		}
 
+		// errgroup returns only the first error; other failures are
+		// recorded in result.NodeResults for debugging.
 		if err := g.Wait(); err != nil {
 			result.Error = err.Error()
 			result.EndTime = time.Now()
@@ -135,12 +161,43 @@ func (e *Executor) Execute(ctx context.Context, f *flow.Flow, inputs map[string]
 	return result, nil
 }
 
+// resolveInputData builds the input data map for a node by reading from
+// flow inputs and previous node outputs. Must be called from the main
+// goroutine (not inside a worker) to avoid concurrent map reads.
+func resolveInputData(node *flow.Node, flowInputs map[string]any, nodeOutputs map[string]map[string]any) (map[string]any, error) {
+	inputData := make(map[string]any)
+	for _, input := range node.Inputs {
+		if input.From == "input" {
+			if val, ok := flowInputs[input.Name]; ok {
+				inputData[input.Name] = val
+			} else {
+				return nil, fmt.Errorf("flow input not provided: %s", input.Name)
+			}
+		} else {
+			parts := strings.SplitN(input.From, ".", 2)
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid input reference: %s", input.From)
+			}
+			nodeID, outputName := parts[0], parts[1]
+			if outputs, ok := nodeOutputs[nodeID]; ok {
+				if val, ok := outputs[outputName]; ok {
+					inputData[input.Name] = val
+				} else {
+					return nil, fmt.Errorf("output not found: %s.%s", nodeID, outputName)
+				}
+			} else {
+				return nil, fmt.Errorf("node outputs not found: %s", nodeID)
+			}
+		}
+	}
+	return inputData, nil
+}
+
 func (e *Executor) executeNode(
 	ctx context.Context,
 	f *flow.Flow,
 	node *flow.Node,
-	flowInputs map[string]any,
-	nodeOutputs map[string]map[string]any,
+	inputData map[string]any,
 ) (*flow.NodeResult, error) {
 	startTime := time.Now()
 
@@ -149,52 +206,6 @@ func (e *Executor) executeNode(
 		Success:   false,
 		Outputs:   make(map[string]any),
 		StartTime: startTime,
-	}
-
-	// Build input data for this node
-	inputData := make(map[string]any)
-	for _, input := range node.Inputs {
-		if input.From == "input" {
-			// Get from flow inputs
-			if val, ok := flowInputs[input.Name]; ok {
-				inputData[input.Name] = val
-			} else {
-				err := fmt.Errorf("flow input not provided: %s", input.Name)
-				result.Error = err.Error()
-				result.EndTime = time.Now()
-				result.Duration = time.Since(startTime)
-				return result, err
-			}
-		} else {
-			// Get from another node's output
-			parts := strings.SplitN(input.From, ".", 2)
-			if len(parts) != 2 {
-				err := fmt.Errorf("invalid input reference: %s", input.From)
-				result.Error = err.Error()
-				result.EndTime = time.Now()
-				result.Duration = time.Since(startTime)
-				return result, err
-			}
-
-			nodeID, outputName := parts[0], parts[1]
-			if outputs, ok := nodeOutputs[nodeID]; ok {
-				if val, ok := outputs[outputName]; ok {
-					inputData[input.Name] = val
-				} else {
-					err := fmt.Errorf("output not found: %s.%s", nodeID, outputName)
-					result.Error = err.Error()
-					result.EndTime = time.Now()
-					result.Duration = time.Since(startTime)
-					return result, err
-				}
-			} else {
-				err := fmt.Errorf("node outputs not found: %s", nodeID)
-				result.Error = err.Error()
-				result.EndTime = time.Now()
-				result.Duration = time.Since(startTime)
-				return result, err
-			}
-		}
 	}
 
 	switch node.Type {
