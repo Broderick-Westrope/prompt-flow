@@ -14,21 +14,17 @@ Each flow runs as its own serverless container service:
 
 Use `Dockerfile.example` as a starting point. The key pattern is:
 
-1. Install or copy the `pfctl` binary
-2. Copy your flow YAML file(s) into the image
-3. Set the entrypoint to `pfctl serve` with your flow file
+1. Use the pfctl base image
+2. Copy your flow YAML file into the image
+3. Set CMD to `pfctl serve` with your flow file
 
 ```dockerfile
-FROM golang:1.25-alpine AS build
-RUN go install github.com/broderick/prompt-flow/cmd/pfctl@latest
-
-FROM gcr.io/distroless/static-debian12
-COPY --from=build /go/bin/pfctl /pfctl
-COPY flows/my-flow.flow.yaml /flow.yaml
-EXPOSE 8080
-ENTRYPOINT ["/pfctl"]
+FROM ghcr.io/broderick/prompt-flow:latest
+COPY my-flow.flow.yaml /flow.yaml
 CMD ["serve", "-p", "8080", "/flow.yaml"]
 ```
+
+Pin to a specific version for reproducible builds (e.g., `ghcr.io/broderick/prompt-flow:1.0.0`).
 
 See `Dockerfile.example` for the full template.
 

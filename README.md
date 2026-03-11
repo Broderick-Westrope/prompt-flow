@@ -179,7 +179,7 @@ Your repo                    Build                     Deploy
 A typical setup looks like this:
 
 1. Your repo contains flow YAML files, a Dockerfile, and deployment config
-2. The Dockerfile installs `pfctl` and copies in your flow file
+2. The Dockerfile uses the pfctl base image and copies in your flow file
 3. CI/CD builds one image per flow and deploys each as a serverless service
 
 See [`examples/deploy/Dockerfile.example`](examples/deploy/Dockerfile.example) for a starting point and [`examples/deploy/README.md`](examples/deploy/README.md) for the full deployment guide.
