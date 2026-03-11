@@ -51,4 +51,4 @@ jobs:
         run: cd web && npm ci && npm run build
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.1.0
+          version: v2.11.3
