@@ -1,0 +1,77 @@
+name: Deploy Azure
+
+on:
+  push:
+    branches: [main, master]
+
+# Required GitHub Secrets:
+#   AZURE_CLIENT_ID        - App registration client ID (for OIDC)
+#   AZURE_TENANT_ID        - Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID  - Azure subscription ID
+#   AZURE_REGISTRY_NAME    - ACR registry name (e.g., pfctlregistry)
+#   AZURE_RESOURCE_GROUP   - Resource group containing the Container App
+#   AZURE_CONTAINER_APP    - Container App name (default: pfctl)
+#
+# Prerequisites:
+#   - OIDC federation configured between GitHub and Azure AD
+#   - Service principal has AcrPush role on ACR (for CI/CD image push)
+#   - The Terraform module creates AcrPull for the Container App identity separately
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - run: go test ./...
+      - run: go vet ./...
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.AZURE_REGISTRY_NAME }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }} .
+          docker tag ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }} ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:latest
+          docker push ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }}
+          docker push ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ secrets.AZURE_CONTAINER_APP }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --container-name ${{ secrets.AZURE_CONTAINER_APP }} \
+            --image ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }}

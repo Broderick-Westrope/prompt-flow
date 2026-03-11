@@ -39,6 +39,11 @@ The `gcp/` directory contains:
 
 Prerequisites: GCP project, `gcloud` CLI, Terraform, Workload Identity Federation for CI/CD.
 
-### Azure (Coming Soon)
+### Azure (Container Apps)
 
-Azure Container Apps support is planned. The `azure/` directory will contain Terraform modules and a GitHub Actions workflow following the same pattern as the GCP example.
+The `azure/` directory contains:
+
+- **`terraform/`** — Terraform module for Container Apps, ACR, Key Vault, and Managed Identity
+- **`deploy-azure.yml`** — GitHub Actions workflow for building, pushing, and deploying to Container Apps
+
+Prerequisites: Azure subscription, `az` CLI, Terraform, OIDC federation between GitHub and Azure AD for CI/CD.

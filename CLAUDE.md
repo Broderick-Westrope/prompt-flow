@@ -66,6 +66,8 @@ The application requires API keys for LLM providers:
 export OPENAI_API_KEY="your-key-here"
 export ANTHROPIC_API_KEY="your-key-here"
 export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playground
+export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"  # Optional: for Azure OpenAI
+export AZURE_OPENAI_API_KEY="your-key-here"  # Optional: for Azure OpenAI
 ```
 
 ## Architecture
@@ -92,6 +94,7 @@ export GITHUB_PLAYGROUND_PAT="your-token-here"  # Optional: for GitHub playgroun
 - `provider.go`: Provider interface and Registry for managing LLM providers
 - `openai.go`: OpenAI API integration with cost estimation
 - `anthropic.go`: Anthropic API integration with cost estimation
+- `azure_openai.go`: Azure OpenAI API integration with cost estimation
 - `github_playground_openai.go`: GitHub Models integration
 - All providers implement the `Provider` interface with `Name()` and `Complete()` methods
 

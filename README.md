@@ -27,7 +27,7 @@ This repo contains an open-source implementation of prompt flows. It is built wi
 - **Vendor Agnostic**: Define flows in YAML or JSON, not tied to any cloud provider
 - **Version Control**: Store flow definitions alongside your code using your tool of choice (eg. Git)
 - **Visual DAG Editor**: Web UI for visualizing and testing flows as a graph
-- **Multi-Provider Support**: Built-in support for OpenAI, Anthropic, Google Vertex AI (Gemini), and GitHub Playground, with extensible provider interface and PRs welcome
+- **Multi-Provider Support**: Built-in support for OpenAI, Anthropic, Azure OpenAI, Google Vertex AI (Gemini), and GitHub Playground, with extensible provider interface and PRs welcome
 - **Router Nodes**: Conditional branching based on LLM output, so your flow can take different paths depending on results
 - **Parallel Execution**: Independent nodes run concurrently, so flows with multiple branches execute faster
 - **Serverless Deployment**: Deploy each flow as its own auto-scaling serverless function (see [Deployment Model](#deployment-model))
@@ -123,6 +123,7 @@ This table shows what environment variable to use for each provider:
 | openai                   | OPENAI_API_KEY        | [API Key](https://platform.openai.com/api-keys)                                                                                                                                                                                                                                  |
 | anthropic                | ANTHROPIC_API_KEY     | [API Key](https://console.anthropic.com/settings/keys)                                                                                                                                                                                                                           |
 | vertex_ai                | GCP_PROJECT_ID        | GCP Project ID (also requires [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials): run `gcloud auth application-default login`). Optionally set `GCP_LOCATION` (defaults to `us-central1`).                          |
+| azure_openai             | AZURE_OPENAI_ENDPOINT | Azure OpenAI resource endpoint (e.g., `https://your-resource.openai.azure.com/`). Also set `AZURE_OPENAI_API_KEY`. The `model` field in flow YAML maps to your Azure deployment name (e.g., if your deployment is named `my-gpt4o`, use `model: "my-gpt4o"`). |
 | github_playground_openai | GITHUB_PLAYGROUND_PAT | [Personal Access Token](https://github.com/settings/personal-access-tokens/new?description=Used+to+call+GitHub+Models+APIs+to+easily+run+LLMs%3A+https%3A%2F%2Fdocs.github.com%2Fgithub-models%2Fquickstart%23step-2-make-an-api-call&name=GitHub+Models+token&user_models=read) |
 
 > 💡 **TIP:**\
@@ -199,7 +200,16 @@ Each flow gets its own Cloud Run service. The Terraform module creates one servi
 
 ### Deploying to Azure Container Apps
 
-Coming soon. Azure Container Apps follows the same pattern (one container app per flow, scale to zero). The `examples/deploy/azure/` directory will contain Terraform modules and a GitHub Actions workflow when ready.
+The [`examples/deploy/azure/`](examples/deploy/azure/) directory contains reference Terraform modules and a GitHub Actions workflow for deploying flows to Azure Container Apps.
+
+What's included:
+
+- **Terraform module** for Container Apps, ACR, Key Vault, and Managed Identity
+- **GitHub Actions workflow** for building, pushing, and deploying images
+
+Prerequisites: an Azure subscription, the Azure CLI, Terraform, OIDC federation for CI/CD auth, and a pre-existing Azure OpenAI resource (if using the Azure OpenAI provider).
+
+Each flow gets its own Container App. The Terraform module creates one service per flow, each backed by its own container image. See the [deploy README](examples/deploy/README.md) for details.
 
 ## Flow Definition Format
 

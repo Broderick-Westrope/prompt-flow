@@ -48,12 +48,16 @@ func NewRegistry() *Registry {
 //  2. Anthropic: ANTHROPIC_API_KEY
 //  3. Github Playground OpenAI: GITHUB_PLAYGROUND_PAT
 //  4. Vertex AI: GCP_PROJECT_ID (optional: GCP_LOCATION, defaults to us-central1)
+//  5. Azure OpenAI: AZURE_OPENAI_ENDPOINT (optional: AZURE_OPENAI_API_KEY)
 func (r *Registry) WithDefaultProviders() *Registry {
 	r.Register(NewOpenAIProvider(os.Getenv("OPENAI_API_KEY")))
 	r.Register(NewAnthropicProvider(os.Getenv("ANTHROPIC_API_KEY")))
 	r.Register(NewGithubPlaygroundOpenAIProvider(os.Getenv("GITHUB_PLAYGROUND_PAT")))
 	if projectID := os.Getenv("GCP_PROJECT_ID"); projectID != "" {
 		r.Register(NewVertexAIProvider(projectID, os.Getenv("GCP_LOCATION")))
+	}
+	if endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT"); endpoint != "" {
+		r.Register(NewAzureOpenAIProvider(endpoint, os.Getenv("AZURE_OPENAI_API_KEY")))
 	}
 	return r
 }

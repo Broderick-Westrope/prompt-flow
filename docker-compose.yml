@@ -9,6 +9,8 @@ services:
       - ANTHROPIC_API_KEY
       - GCP_PROJECT_ID
       - GCP_LOCATION
+      - AZURE_OPENAI_ENDPOINT
+      - AZURE_OPENAI_API_KEY
     volumes:
       - ./examples:/examples:ro
     command: ["serve", "-p", "8080", "/examples/flows/simple.flow.yaml"]

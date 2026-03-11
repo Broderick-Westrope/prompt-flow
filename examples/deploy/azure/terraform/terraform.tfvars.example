@@ -1,0 +1,17 @@
+resource_group_name = "pfctl-rg"
+location            = "australiaeast"
+service_name        = "pfctl"
+image_tag           = "latest"
+
+# Sensitive variables — provide via TF_VAR_ environment variables, -var flags,
+# or a .auto.tfvars file excluded from version control. Do not commit secrets.
+#
+# API keys:
+# openai_api_key         = ""
+# anthropic_api_key      = ""
+
+# Azure OpenAI — requires a pre-existing Azure OpenAI resource with deployed models.
+# Create via Azure Portal, CLI, or separate Terraform config.
+# The "model" field in flow YAML maps to your Azure deployment name, not the OpenAI model name.
+# azure_openai_endpoint  = "https://your-resource.openai.azure.com/"
+# azure_openai_api_key   = ""
