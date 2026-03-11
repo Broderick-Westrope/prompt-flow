@@ -34,7 +34,7 @@ func newTestServer(t *testing.T, mode string) *Server {
 }
 
 func TestHealthzEndpoint(t *testing.T) {
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	handler := srv.testHandler(t)
 
 	rec := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestHealthzEndpoint(t *testing.T) {
 }
 
 func TestReadyzWithLoadedFlow(t *testing.T) {
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	handler := srv.testHandler(t)
 
 	rec := httptest.NewRecorder()
@@ -79,7 +79,7 @@ func TestReadyzWithoutFlow(t *testing.T) {
 	srv := &Server{
 		flow:   nil,
 		logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
-		mode:   "dev",
+		mode:   ModeDev,
 	}
 	handler := srv.testHandler(t)
 
@@ -101,7 +101,7 @@ func TestReadyzWithoutFlow(t *testing.T) {
 }
 
 func TestDevModeRegistersAllEndpoints(t *testing.T) {
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	handler := srv.testHandler(t)
 
 	endpoints := []struct {
@@ -126,7 +126,7 @@ func TestDevModeRegistersAllEndpoints(t *testing.T) {
 }
 
 func TestProdModeReturns404ForDevEndpoints(t *testing.T) {
-	srv := newTestServer(t, "prod")
+	srv := newTestServer(t, ModeProd)
 	handler := srv.testHandler(t)
 
 	endpoints := []struct {
@@ -151,7 +151,7 @@ func TestProdModeReturns404ForDevEndpoints(t *testing.T) {
 }
 
 func TestProdModeExecuteWorks(t *testing.T) {
-	srv := newTestServer(t, "prod")
+	srv := newTestServer(t, ModeProd)
 	handler := srv.testHandler(t)
 
 	body := `{"inputs": {"user_input": "hello"}}`
@@ -168,7 +168,7 @@ func TestProdModeExecuteWorks(t *testing.T) {
 }
 
 func TestExecuteRejects400WithFlowField(t *testing.T) {
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	handler := srv.testHandler(t)
 
 	body := `{"flow": {"name": "test"}, "inputs": {"user_input": "hello"}}`
@@ -188,7 +188,7 @@ func TestExecuteRejects400WithFlowField(t *testing.T) {
 }
 
 func TestGetFlowReturnsPreloadedFlow(t *testing.T) {
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	handler := srv.testHandler(t)
 
 	rec := httptest.NewRecorder()
@@ -214,7 +214,7 @@ func TestRequestLoggingMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	srv.logger = logger
 
 	handler := srv.testHandler(t)
@@ -236,7 +236,7 @@ func TestRequestLoggingMiddlewareRecordsStatusCode(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 
-	srv := newTestServer(t, "dev")
+	srv := newTestServer(t, ModeDev)
 	srv.logger = logger
 
 	notFound := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -251,5 +251,25 @@ func TestRequestLoggingMiddlewareRecordsStatusCode(t *testing.T) {
 	logOutput := buf.String()
 	if !bytes.Contains([]byte(logOutput), []byte("status=404")) {
 		t.Errorf("log output missing status=404, got: %s", logOutput)
+	}
+}
+
+func TestNewRequiresFlowPath(t *testing.T) {
+	_, err := New(Config{})
+	if err == nil {
+		t.Fatal("expected error for empty FlowPath")
+	}
+}
+
+func TestNewRejectsInvalidMode(t *testing.T) {
+	_, err := New(Config{
+		FlowPath: testdataPath("simple.flow.yaml"),
+		Mode:     "staging",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid mode")
+	}
+	if !strings.Contains(err.Error(), "invalid mode") {
+		t.Fatalf("expected 'invalid mode' error, got: %v", err)
 	}
 }

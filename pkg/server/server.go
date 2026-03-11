@@ -25,13 +25,18 @@ var staticFiles embed.FS
 
 const maxRequestBodySize = 1 << 20 // 1MB
 
+const (
+	ModeDev  = "dev"
+	ModeProd = "prod"
+)
+
 type Config struct {
 	Port             int
 	FlowPath         string
 	ShowStartEndNode bool
 	ExecutionTimeout time.Duration
 	Logger           *slog.Logger
-	Mode             string // "dev" or "prod"; defaults to "dev"
+	Mode             string // ModeDev or ModeProd; defaults to ModeDev
 }
 
 type Server struct {
@@ -53,7 +58,10 @@ func New(cfg Config) (*Server, error) {
 
 	mode := cfg.Mode
 	if mode == "" {
-		mode = "dev"
+		mode = ModeDev
+	}
+	if mode != ModeDev && mode != ModeProd {
+		return nil, fmt.Errorf("invalid mode %q: must be %q or %q", mode, ModeDev, ModeProd)
 	}
 
 	f, err := flow.Parse(cfg.FlowPath)
@@ -101,7 +109,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /api/flow/execute", s.handleExecuteFlow)
 
 	// Dev-only endpoints
-	if s.mode == "dev" {
+	if s.mode == ModeDev {
 		mux.HandleFunc("GET /api/flow", s.handleGetFlow)
 		mux.HandleFunc("POST /api/flow/validate", s.handleValidateFlow)
 		mux.HandleFunc("GET /api/providers", s.handleGetProviders)
@@ -145,7 +153,7 @@ func (s *Server) Start() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		s.logger.Info("server starting", "port", s.port, "flow", s.flowPath)
+		s.logger.Info("server starting", "port", s.port, "flow", s.flowPath, "mode", s.mode)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -212,11 +220,6 @@ func (s *Server) handleGetFlow(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -289,12 +292,7 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func (s *Server) handleGetProviders(w http.ResponseWriter, _ *http.Request) {
 	providers := s.registry.List()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -302,12 +300,7 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"showStartEndNode": s.showStartEndNode,
