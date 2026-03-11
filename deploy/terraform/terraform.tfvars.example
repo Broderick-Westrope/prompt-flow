@@ -1,0 +1,8 @@
+project_id    = "your-gcp-project-id"
+region        = "australia-southeast1"
+service_name  = "pfctl"
+image_tag     = "latest"
+
+# Sensitive - set via environment or CI/CD secrets
+# openai_api_key    = ""
+# anthropic_api_key = ""
