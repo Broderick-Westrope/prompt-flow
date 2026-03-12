@@ -47,7 +47,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }} .
+          docker build --platform linux/amd64 -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }} .
           docker tag ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:${{ github.sha }} ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pfctl/pfctl:latest
 
       - name: Push Docker image

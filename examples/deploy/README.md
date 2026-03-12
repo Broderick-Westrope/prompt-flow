@@ -47,3 +47,12 @@ The `azure/` directory contains:
 - **`deploy-azure.yml`** — GitHub Actions workflow for building, pushing, and deploying to Container Apps
 
 Prerequisites: Azure subscription, `az` CLI, Terraform, OIDC federation between GitHub and Azure AD for CI/CD.
+
+> **Terraform backend:** The `azurerm` backend requires a pre-existing Azure Storage Account (resource group, storage account, and blob container). These values are passed via `-backend-config` flags at `terraform init` time.
+
+**Getting started:**
+
+1. Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and fill in your values before running `terraform plan`.
+2. Run `terraform apply`. This creates ACR and other infrastructure, but the Container App will fail because no image exists in ACR yet.
+3. Build and push your image to ACR. If you're on Apple Silicon, use `--platform linux/amd64` when building.
+4. Run `terraform apply` again — the Container App will now start successfully.

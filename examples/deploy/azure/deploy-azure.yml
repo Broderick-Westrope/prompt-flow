@@ -49,7 +49,7 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }} .
+          docker build --platform linux/amd64 -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }} .
           docker tag ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }} ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:latest
           docker push ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:${{ github.sha }}
           docker push ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/pfctl:latest
