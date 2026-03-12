@@ -42,7 +42,7 @@ func TestAzureOpenAIProvider_Complete_EmptyAPIKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty API key")
 	}
-	if got := err.Error(); got != "Azure OpenAI provider received an empty API key" {
+	if got := err.Error(); got != "azure OpenAI provider received an empty API key" {
 		t.Errorf("error = %q, want descriptive API key error", got)
 	}
 }
@@ -56,7 +56,7 @@ func TestAzureOpenAIProvider_Complete_EmptyEndpoint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty endpoint")
 	}
-	if got := err.Error(); got != "Azure OpenAI provider received an empty endpoint (set AZURE_OPENAI_ENDPOINT)" {
+	if got := err.Error(); got != "azure OpenAI provider received an empty endpoint (set AZURE_OPENAI_ENDPOINT)" {
 		t.Errorf("error = %q, want descriptive endpoint error", got)
 	}
 }

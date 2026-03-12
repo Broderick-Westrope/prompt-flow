@@ -37,11 +37,11 @@ func (p *AzureOpenAIProvider) Name() string {
 
 func (p *AzureOpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	if !p.apiKeySet {
-		return nil, fmt.Errorf("Azure OpenAI provider received an empty API key")
+		return nil, fmt.Errorf("azure OpenAI provider received an empty API key")
 	}
 
 	if p.endpoint == "" {
-		return nil, fmt.Errorf("Azure OpenAI provider received an empty endpoint (set AZURE_OPENAI_ENDPOINT)")
+		return nil, fmt.Errorf("azure OpenAI provider received an empty endpoint (set AZURE_OPENAI_ENDPOINT)")
 	}
 
 	// Build the request — identical to OpenAI, but req.Model maps to the Azure deployment name
@@ -73,7 +73,7 @@ func (p *AzureOpenAIProvider) Complete(ctx context.Context, req CompletionReques
 
 	resp, err := p.client.CreateChatCompletion(ctx, chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("Azure OpenAI API call failed: %w", err)
+		return nil, fmt.Errorf("azure OpenAI API call failed: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {

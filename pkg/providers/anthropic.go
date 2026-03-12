@@ -31,7 +31,7 @@ func (p *AnthropicProvider) Name() string {
 // Complete sends a prompt to Anthropic and returns the response
 func (p *AnthropicProvider) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	if !p.apiKeySet {
-		return nil, fmt.Errorf("Anthropic Provider received an empty API key")
+		return nil, fmt.Errorf("anthropic provider received an empty API key")
 	}
 
 	// Get settings with defaults
@@ -60,7 +60,7 @@ func (p *AnthropicProvider) Complete(ctx context.Context, req CompletionRequest)
 	// Call Anthropic
 	resp, err := p.client.CreateMessages(ctx, chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("Anthropic API call failed: %w", err)
+		return nil, fmt.Errorf("anthropic API call failed: %w", err)
 	}
 
 	// Extract text content

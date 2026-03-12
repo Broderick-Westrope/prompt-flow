@@ -81,7 +81,7 @@ func (p *VertexAIProvider) Complete(ctx context.Context, req CompletionRequest) 
 
 	resp, err := model.GenerateContent(ctx, genai.Text(req.Prompt))
 	if err != nil {
-		return nil, fmt.Errorf("Vertex AI API call failed: %w", err)
+		return nil, fmt.Errorf("vertex AI API call failed: %w", err)
 	}
 
 	if len(resp.Candidates) == 0 ||

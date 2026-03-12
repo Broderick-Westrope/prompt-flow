@@ -199,24 +199,28 @@ func (s *Server) requestLoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		s.logger.Error("failed to encode JSON response", "error", err)
+	}
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	if s.flow == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"status": "unavailable"})
+		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleGetFlow(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.flow)
+	s.writeJSON(w, http.StatusOK, s.flow)
 }
 
 func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
@@ -226,12 +230,10 @@ func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to read request: %v", err), http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
 
 	f, err := flow.ParseBytes(body, "flow.yaml")
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		s.writeJSON(w, http.StatusOK, map[string]any{
 			"valid": false,
 			"error": fmt.Sprintf("Parse error: %v", err),
 		})
@@ -240,16 +242,14 @@ func (s *Server) handleValidateFlow(w http.ResponseWriter, r *http.Request) {
 
 	err = flow.Validate(f)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		s.writeJSON(w, http.StatusOK, map[string]any{
 			"valid": false,
 			"error": fmt.Sprintf("Validation error: %v", err),
 		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	s.writeJSON(w, http.StatusOK, map[string]any{
 		"valid": true,
 		"nodes": len(f.Nodes),
 	})
@@ -282,27 +282,21 @@ func (s *Server) handleExecuteFlow(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.executor.Execute(ctx, s.flow, inputs)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(result)
+		s.writeJSON(w, http.StatusOK, result)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	s.writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleGetProviders(w http.ResponseWriter, _ *http.Request) {
-	providers := s.registry.List()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"providers": providers,
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"providers": s.registry.List(),
 	})
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	s.writeJSON(w, http.StatusOK, map[string]any{
 		"showStartEndNode": s.showStartEndNode,
 	})
 }
